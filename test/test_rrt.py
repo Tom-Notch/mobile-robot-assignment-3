@@ -1,27 +1,20 @@
+#!/usr/bin/env python3
+import os
 import sys
-import copy
-import os
-import unittest
-import numpy as np
-import math
-from sklearn.metrics import mean_squared_error
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from bresenham import bresenham
 
-import os
-qs_path = os.path.dirname(os.path.abspath(__file__))+'/..'
+import matplotlib.image as mpimg
+import matplotlib.pyplot as plt
+import numpy as np
+
+qs_path = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(qs_path)
 
-from quadrotor_simulator_py.quadrotor_control.state import State
-from quadrotor_simulator_py.utils import Rot3
-from quadrotor_simulator_py.quadrotor_model import QuadrotorModel
-from quadrotor_simulator_py.utils.quaternion import Quaternion
-from quadrotor_simulator_py.quadrotor_planning.rrt import RRT
 from quadrotor_simulator_py.quadrotor_planning.collision_checker import CollisionChecker
+from quadrotor_simulator_py.quadrotor_planning.rrt import RRT
+
 
 def run_rrt_test(start, end, plot=True):
-    grid = mpimg.imread(qs_path+'/data/map.png')
+    grid = mpimg.imread(qs_path + "/data/map.png")
     rrt = RRT(start, end, grid)
     collision_checker = CollisionChecker(grid)
     end_node = rrt.run()
@@ -35,9 +28,9 @@ def run_rrt_test(start, end, plot=True):
             ys = [parent[1], c[1]]
 
             if plot:
-                plt.plot(xs, ys, 'm')
+                plt.plot(xs, ys, "m")
 
-    assert(end_node.idx != end_node.parent_idx)
+    assert end_node.idx != end_node.parent_idx
 
     success = 1.0
     while end_node.idx != end_node.parent_idx:
@@ -51,17 +44,18 @@ def run_rrt_test(start, end, plot=True):
         end_node = rrt.tree[end_node.parent_idx]
 
         if plot:
-            plt.plot(xs, ys, 'c', linewidth=3)
+            plt.plot(xs, ys, "c", linewidth=3)
 
     if plot:
-        plt.xlabel('x [m]')
-        plt.ylabel('y [m]')
-        plt.gca().set_aspect('equal')
+        plt.xlabel("x [m]")
+        plt.ylabel("y [m]")
+        plt.gca().set_aspect("equal")
         plt.imshow(grid)
-        plt.plot(start[0], start[1], 'r+')
-        plt.plot(end[0], end[1], 'b+')
+        plt.plot(start[0], start[1], "r+")
+        plt.plot(end[0], end[1], "b+")
         plt.show()
     return success
+
 
 success = 0.0
 start = np.array([250, 250])
@@ -71,4 +65,4 @@ success += run_rrt_test(start, end, True)
 start = np.array([100, 120])
 end = np.array([150, 220])
 success += run_rrt_test(start, end, False)
-print('RRT succeeded ' + str(int(success)) + ' out of 2 tests')
+print("RRT succeeded " + str(int(success)) + " out of 2 tests")

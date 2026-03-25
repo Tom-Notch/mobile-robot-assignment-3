@@ -1,10 +1,11 @@
+#!/usr/bin/env python3
 from bresenham import bresenham
-import numpy as np
+
 
 class CollisionChecker:
 
     def __init__(self, grid):
-       self.grid = grid 
+        self.grid = grid
 
     def has_collision(self, p0, p1):
         x0 = p0[0]

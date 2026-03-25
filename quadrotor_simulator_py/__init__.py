@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 quadrotor_simulator_py
 ========
@@ -8,9 +9,7 @@ Python-wrapper over Quadrotor Simulator package.
 __version__ = "0.0.0"
 
 try:
-    from . import quadrotor_model
-    from . import quadrotor_planning
-    from . import quadrotor_control
+    pass
 except:
     pass
 

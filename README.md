@@ -4,11 +4,13 @@ Goals: In this assignment, you will implement motion planners that may
 be used by a quadrotor.
 
 ### Academic Integrity
+
 1. Do not publicly share your solution (using GitHub or otherwise)
-2. Collaboration is encouraged but you should write final code on your own.
-3. No AI tools may be used to complete this assignment. This includes but is not limited to Copilot, ChatGPT, Perplexity AI, and Cursor AI.
+1. Collaboration is encouraged but you should write final code on your own.
+1. No AI tools may be used to complete this assignment. This includes but is not limited to Copilot, ChatGPT, Perplexity AI, and Cursor AI.
 
 ## 0. Setup
+
 Download the assignment.
 
 ```
@@ -60,6 +62,7 @@ pip install bresenham numpy matplotlib scikit-learn pyyaml
 ```
 
 ## 1. 5th Order Polynomial Trajectory (40 points)
+
 In this part of the homework you will implement the 5th order
 polynomial trajectory with fixed initial and endpoint constraints
 (i.e., position, velocity, and acceleration) as described in
@@ -68,10 +71,12 @@ You will also implement functions to evaluate the trajectories for a
 particular derivative at a given time.
 
 ### 1.1 Coefficients for single axis trajectory (10 points)
+
 You will write the single axis trajectory in `muellertrajectory.py`.
 To test your solution, you can run `test/test_mueller_trajectory.py`.
 
 ### 1.2 Evaluating a single axis trajectory (10 points)
+
 In this portion of the assignment you will implement the following
 functions in `polynomialtrajectory.py`.
 
@@ -87,8 +92,9 @@ specified by order for the time specified by time.
 To test your solution, you can run `test/test_polynomial_trajectory.py`.
 
 ### 1.3 Obtaining references for multi-axis trajectories (10 points)
+
 You will need to implement the function `get_ref` in
-`flatspacetrajectory.py`.  To test your solution, you can run
+`flatspacetrajectory.py`. To test your solution, you can run
 `test/test_flat_space_trajectory.py`. If your solution is correct, you should see the following output:
 
 ![Position](img/pos.png)
@@ -100,6 +106,7 @@ You will need to implement the function `get_ref` in
 ![Yaw](img/yaw.png)
 
 ### 1.4 Managing multiple multi-axis trajectories (10 points)
+
 Managing multiple multi-axis trajectories can be challenging, because
 you need to carefully schedule the trajectories and account for time
 properly.
@@ -112,24 +119,28 @@ To test your solution, you can run `test/test_multiflatspacetrajmanager.py`.
 ![Acceleration](img/macc.png)
 
 ## 2. Forward Arc Motion Primitives (40 points)
+
 In this part of the homework you will implement the forward arc motion
-primitives described in class.  To test your solution, you can run
+primitives described in class. To test your solution, you can run
 `test/test_famp.py`. If your solution is correct,
 you will see something similar to the output below.
 
 ![Forward Arc Motion Primitives](img/famp.png)
 
 ### 2.1 Coefficients for forward arc motion primitives (30 points)
+
 You will calculate coefficients for the multi-axis forward arc
 trajectory (x,y,z,yaw) in the `__init__` function of
 `forwararctrajectory.py`.
 
 ### 2.2 Obtaining reference (10 points)
+
 Derive the reference as a `State()` object in the `get_ref`
 function of `forwardarctrajectory.py`. You may use functions
 or classes from Part 1 of this assignment to make your life easier.
 
 ## 3. RRT (20 points)
+
 You will implement a Rapidly Exploring Random Tree in `rrt.py`. A
 collision checker is provided to you in `collision_checker.py`.
 To test your solution, run `test_rrt.py`.
@@ -139,6 +150,7 @@ end point will be illustrated in cyan.
 ![Rapidly Exploring Random Tree](img/rrt.png)
 
 ## 4. Grading with AutoLab
+
 To have your solutions graded, you will need to tar the `quadrotor_simulator_py`
 folder and upload to autolab.
 
@@ -147,7 +159,7 @@ tar -cvf handin.tar quadrotor_simulator_py
 ```
 
 Autolab will run tests on each function you implement and you will
-receive a score out of 100.  You may upload as many times as you like.
+receive a score out of 100. You may upload as many times as you like.
 Note that we may regrade submissions after the deadline passes.
 
 ## Troubleshooting

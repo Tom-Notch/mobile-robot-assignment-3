@@ -1,15 +1,16 @@
-import sys
-import numpy as np
-import matplotlib.pyplot as plt
-
-from quadrotor_simulator_py.quadrotor_control.state import State
-
+#!/usr/bin/env python3
 import os
-qs_path = os.path.dirname(os.path.abspath(__file__))+'/..'
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+qs_path = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(qs_path)
 
+
 def plot(times, states, correct_states):
-    labels = ['x', 'y', 'z']
+    labels = ["x", "y", "z"]
 
     fig, axs = plt.subplots(3)
     x = np.array([s.pos[0, 0] for s in states])
@@ -26,8 +27,8 @@ def plot(times, states, correct_states):
         axs[i].plot(times, pos[i, :], linewidth=4)
         axs[i].plot(times, cpos[i, :])
         axs[i].set_ylabel(labels[i])
-    plt.suptitle('Position')
-    axs[0].legend(['Student Soln.', 'Ground Truth'])
+    plt.suptitle("Position")
+    axs[0].legend(["Student Soln.", "Ground Truth"])
     plt.show()
 
     fig, axs = plt.subplots(3)
@@ -45,8 +46,8 @@ def plot(times, states, correct_states):
         axs[i].plot(times, vel[i, :], linewidth=4)
         axs[i].plot(times, cvel[i, :])
         axs[i].set_ylabel(labels[i])
-    plt.suptitle('Velocity')
-    axs[0].legend(['Student Soln.', 'Ground Truth'])
+    plt.suptitle("Velocity")
+    axs[0].legend(["Student Soln.", "Ground Truth"])
     plt.show()
 
     fig, axs = plt.subplots(3)
@@ -63,8 +64,8 @@ def plot(times, states, correct_states):
         axs[i].plot(times, acc[i, :], linewidth=4)
         axs[i].plot(times, cacc[i, :])
         axs[i].set_ylabel(labels[i])
-    plt.suptitle('Acceleration')
-    axs[0].legend(['Student Soln.', 'Ground Truth'])
+    plt.suptitle("Acceleration")
+    axs[0].legend(["Student Soln.", "Ground Truth"])
     plt.show()
 
     fig, axs = plt.subplots(3)
@@ -77,12 +78,11 @@ def plot(times, states, correct_states):
     yd = np.array([s.dyaw for s in correct_states])
     ydd = np.array([s.d2yaw for s in correct_states])
     cyaw = np.vstack((y, yd, ydd))
-    labels = ['$\psi$', '$\dot{\psi}$', '$\ddot{\psi}$']
+    labels = ["$\psi$", "$\dot{\psi}$", "$\ddot{\psi}$"]
     for i in range(0, 3):
         axs[i].plot(times, yaw[i, :], linewidth=4)
         axs[i].plot(times, cyaw[i, :])
         axs[i].set_ylabel(labels[i])
-    plt.suptitle('Yaw and derivatives')
-    axs[0].legend(['Student Soln.', 'Ground Truth'])
+    plt.suptitle("Yaw and derivatives")
+    axs[0].legend(["Student Soln.", "Ground Truth"])
     plt.show()
-

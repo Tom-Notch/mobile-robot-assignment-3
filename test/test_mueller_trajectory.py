@@ -1,15 +1,18 @@
-import sys
-import numpy as np
-from sklearn.metrics import mean_squared_error
-
+#!/usr/bin/env python3
 import os
-qs_path = os.path.dirname(os.path.abspath(__file__))+'/..'
+import sys
+
+import numpy as np
+
+qs_path = os.path.dirname(os.path.abspath(__file__)) + "/.."
 sys.path.append(qs_path)
 
 from quadrotor_simulator_py.quadrotor_planning import MuellerTrajectory
 
+
 def compare_coefficients(student_soln, correct_soln, eps):
-    assert(np.max(abs(student_soln-correct_soln)) < eps)
+    assert np.max(abs(student_soln - correct_soln)) < eps
+
 
 def test_mueller_trajectory():
     eps = 1e-3
@@ -19,7 +22,7 @@ def test_mueller_trajectory():
     xf = np.array([0.0, 0.0, 0.0])
     mp = MuellerTrajectory(x0, xf, T)
     c = mp.coefficients
-    correct_c = np.array([ 1., 0., 0., -1.25, 0.9375, -0.1875])
+    correct_c = np.array([1.0, 0.0, 0.0, -1.25, 0.9375, -0.1875])
     compare_coefficients(c, correct_c, eps)
 
     x0 = np.array([0.2, 0.4, 0.6])
@@ -37,5 +40,6 @@ def test_mueller_trajectory():
     compare_coefficients(c, correct_c, eps)
 
     print("Mueller Trajectory coefficients correct")
+
 
 test_mueller_trajectory()
