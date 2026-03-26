@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
+
+from typing import Optional
+
 import numpy as np
 
 
 # Represents single axis polynomial trajectory
-class PolynomialTrajectory:
+class PolynomialTrajectory(object):
 
-    coefficients = None
-    T = None
-
-    def __init__(self, coefficients=None, T=None):
+    def __init__(
+        self,
+        coefficients: Optional[np.ndarray] = None,
+        T: Optional[float] = None,
+    ) -> None:
         """Stores coefficients in the following form:
         p(t) = coefficients[0] + coefficients[1] * t + ... +
                coefficients[n-1]*t^(n-1)
@@ -19,10 +23,10 @@ class PolynomialTrajectory:
             T: scalar input for duration of the trajectory
         """
 
-        self.coefficients = coefficients
-        self.T = T
+        self.coefficients: Optional[np.ndarray] = coefficients
+        self.T: Optional[float] = T
 
-    def derivative(self, order=0):
+    def derivative(self, order: int = 0) -> np.ndarray:
         """returns the derivative of the coefficients specified by the given order.
         For example:
             - order 0, return same coefficients
@@ -39,12 +43,16 @@ class PolynomialTrajectory:
                     equal to order.
         """
 
-        # TODO: Assignment 3, Problem 1.2
+        c = np.asarray(self.coefficients, dtype=float).copy()
+        for _ in range(order):
+            n = len(c)
+            if n <= 1:
+                c = np.array([0.0])
+            else:
+                c = np.array([(i + 1) * c[i + 1] for i in range(n - 1)])
+        return c
 
-        temp_coeffs = np.zeros(len(self.coefficients.tolist()) - order)
-        return temp_coeffs
-
-    def evaluate(self, time, order):
+    def evaluate(self, time: float, order: int) -> float:
         """Takes the derivative of the coefficients specified by the input
             `order` and then evaluates them for time `time`.
 
@@ -57,13 +65,10 @@ class PolynomialTrajectory:
                    coefficients taken at time time.
         """
 
-        # TODO: Assignment 3, Problem 1.2
+        coeffs = self.derivative(order)
+        return float(np.polyval(coeffs[::-1], time))
 
-        value = 0.0
-        return value
-
-    # Generate reference up to order at a given time
-    def get_ref(self, time, order):
+    def get_ref(self, time: float, order: int) -> np.ndarray:
         """Returns the references up to the derivative specified
             by order for the time specified by time.
 
@@ -76,7 +81,7 @@ class PolynomialTrajectory:
             order: derivative to evaluate the polynomial
         """
 
-        # TODO: Assignment 3, Problem 1.2
-
         ref = np.zeros(order + 1)
+        for k in range(order + 1):
+            ref[k] = self.evaluate(time, k)
         return ref

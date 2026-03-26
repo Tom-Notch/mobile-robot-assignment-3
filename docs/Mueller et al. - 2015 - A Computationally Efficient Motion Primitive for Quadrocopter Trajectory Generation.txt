@@ -1,0 +1,2368 @@
+1294
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+A Computationally Efficient Motion Primitive
+for Quadrocopter Trajectory Generation
+Mark W. Mueller, Markus Hehn, and Raffaello D’Andrea
+
+Abstract—A method is presented for the rapid generation and
+feasibility verification of motion primitives for quadrocopters and
+similar multirotor vehicles. The motion primitives are defined by
+the quadrocopter’s initial state, the desired motion duration, and
+any combination of components of the quadrocopter’s position,
+velocity, and acceleration at the motion’s end. Closed-form solutions for the primitives are given, which minimize a cost function
+related to input aggressiveness. Computationally efficient tests are
+presented to allow for rapid feasibility verification. Conditions are
+given under which the existence of feasible primitives can be guaranteed a priori. The algorithm may be incorporated in a high-level
+trajectory generator, which can then rapidly search over a large
+number of motion primitives which would achieve some given highlevel goal. It is shown that a million motion primitives may be evaluated and compared per second on a standard laptop computer. The
+motion primitive generation algorithm is experimentally demonstrated by tasking a quadrocopter with an attached net to catch a
+thrown ball, evaluating thousands of different possible motions to
+catch the ball.
+Index Terms—Aerial robotics, motion control, motion primitive,
+quadrocopter.
+
+I. INTRODUCTION
+UADROCOPTERS offer exceptional agility, with typically high thrust-to-weight ratios, and large potential
+for angular acceleration due to the outward mounting of the
+propellers. This allows them to perform complex and highly
+dynamic tasks, for example, aerial manipulation [1] and cooperative aerial acrobatics [2]. The ability to hover and the safety
+offered by small rotors storing relatively little energy [3] make
+quadrocopters attractive platforms for aerial robotic tasks that
+involve the navigation of tight cluttered environments (see, for
+example, [4], [5]).
+A key feature required for the use of these vehicles under
+complex conditions is a trajectory generator. The trajectory generator is tasked with computing flight paths that achieve the task
+objective, while respecting the quadrocopter dynamics. The trajectory must also be collision-free, and there could be additional
+requirements imposed on the motion by the sensing modalities
+(for example, limits on the quadrocopter velocity imposed by an
+
+Q
+
+Manuscript received August 23, 2014; revised February 10, 2015 and August
+24, 2015; accepted September 15, 2015. Date of publication October 16, 2015;
+date of current version December 2, 2015. This paper was recommended for
+publication by Editor T. Murphey upon evaluation of the reviewers’ comments.
+This work was supported by the Swiss National Science Foundation.
+The authors are with the Institute for Dynamic Systems and Control,
+ETH Zurich, 8092 Zurich, Switzerland (e-mail: mwm@ethz.ch; hehnm@
+ethz.ch; rdandrea@ethz.ch).
+This paper has supplementary downloadable material available at http://
+ieeexplore.ieee.org.
+Color versions of one or more of the figures in this paper are available online
+at http://ieeexplore.ieee.org.
+Digital Object Identifier 10.1109/TRO.2015.2479878
+
+onboard camera). This trajectory planning problem is complicated by the underactuated and nonlinear nature of the quadrocopter dynamics, as well as potentially complex task constraints
+that may consist of variable manoeuvre durations, partially constrained final states, and nonconvex state constraints. In addition, dynamic environments or large disturbances may require
+the recomputation or adaptation of trajectories in real time, thus
+limiting the time available for computation.
+Active research in this field has yielded numerous trajectory
+generation algorithms, focusing on different tradeoffs between
+computational complexity, the agility of the possible motions,
+the level of detail in which manoeuvre constraints can be specified, and the ability to handle complex environments.
+Broadly speaking, a first group of algorithms handles the trajectory generation problem by decoupling geometric and temporal planning: In a first step, a geometric trajectory without
+time information is constructed, for example, using lines [6],
+polynomials [7], or splines [8]. In a second step, the geometric
+trajectory is parameterized in time in order to guarantee feasibility with respect to the dynamics of quadrocopters.
+A second group of algorithms exploits the differential flatness of the quadrocopter dynamics in order to derive constraints
+on the trajectory and then solves an optimization problem over
+a class of trajectories, for example, minimum snap [9], minimum time [10], shortest path under uncertain conditions [11],
+or combinations of position derivatives [5]. In [12], a search
+over parameters is proposed for quadrocopter motion planning,
+including trajectories where the position is described by polynomials in time. A dynamic inversion-based controller is proposed
+in [13] to directly control a quadrocopter’s position and orientation, and this controller is exploited in [14]. For a broader discussion of differential flatness, see, e.g., [15], [16], and, e.g., [17],
+[18] for generic trajectory generation methods for differentially
+flat systems.
+A common property of these methods is that they impose
+a rigid structure on the end state, for example, fixing the final state and allowing a fixed or varying manoeuvre duration,
+or by specifying the goal state with convex inequalities. Many
+quadrocopter applications do not, however, impose such structured constraints; instead, the set of states that achieve the application might be nonconvex, or even disjoint. Furthermore, the
+conditions on the final state necessary to achieve a task may be
+time dependent (for example, when the task objective involves
+interaction with a dynamic environment). Methods relying on
+convex optimization, furthermore, require the construction of
+(conservative) convex approximations of constraints, potentially
+significantly reducing the space of feasible trajectories.
+This paper attempts a different approach to multicopter trajectory generation, where the constraints are not explicitly
+
+1552-3098 © 2015 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+Authorized licensed use limited
+University Libraries. Downloaded on
+March 25,2026 at 18:45:48
+UTC from
+IEEE Xplore. Restrictions apply.
+Seeto: Carnegie Mellon
+http://www.ieee.org/publications
+standards/publications/rights/index.html
+for more
+information.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+Fig. 1. Presented algorithm aims to provide computationally inexpensive motion primitives, which may then be incorporated by a high-level trajectory generator. The focus of this paper is on the right-hand-side (unshaded) part of this
+diagram.
+
+encoded at the planning stage. Instead, the focus is on developing
+a computationally light-weight and easy-to-implement motion
+primitive, which can be easily tested for constraints violation,
+and allows significant flexibility in defining initial and final conditions for the quadrocopter. The low computational cost may
+then be exploited by searching over a multitude of primitives
+to achieve some goal. Each primitive is characterized by the
+quadrocopter’s initial state, a duration, and a set of constraints
+on the quadrocopter’s position, velocity, and/or acceleration at
+the end of the primitive.
+The approach is illustrated in Fig. 1. The high-level trajectory generator is tasked with evaluating motion primitives, and
+specifically with defining the constraints on the motion primitives to solve the given high-level goal. The high-level trajectory
+generator must also encode the behavior for dealing with infeasible motion primitives. As an example, the high-level trajectory
+generator may generate a large number of motion primitives,
+with varying durations and end variables, to increase the probability of finding a feasible motion primitive. These motion primitives are generated in a two-step approach: First, a state-to-state
+planner is used to generate a motion while disregarding feasibility constraints. In the second step, this trajectory is checked
+for feasibility. The first step is solved for in closed form, while
+a computationally efficient recursive test is designed for the
+feasibility tests of the second step.
+The state-to-state motion primitives generated in the first step
+are closely related to other algorithms exploiting the differential
+flatness of the quadrocopter dynamics to plan position trajectories that are polynomials in time (see, e.g., [5], [9], [12]). In
+this paper, an optimal control problem is solved, whose objective function is related to minimizing an upper bound of the
+product of the quadrocopter inputs, to yield position trajectories
+characterized by fifth-order polynomials in time. A key property
+that is then exploited is that the specific polynomials allow for
+the rapid verification of constraints on the system’s inputs, and
+constraints on the position, velocity, and/or acceleration.
+The benefits of this approach are twofold: First, a unified
+framework is given to generate trajectories for arbitrary manoeuvre duration and end state constraints, resulting in an algorithm which can be easily implemented across a large range of
+trajectory generation problems. Second, the computational cost
+of the approach is shown to be very low, such that on the order of
+
+1295
+
+one million motion primitives per second can be generated and
+tested for feasibility on a laptop computer with an unoptimized
+implementation.
+The algorithm, therefore, lends itself to problems with significant freedom in the end state. In this situation, the designer can
+apply the presented approach to rapidly search over the space
+of end states and trajectory durations which would achieve the
+high level goal. This ability to quickly evaluate a vast number of candidate trajectories is achieved at the expense of not
+directly considering the feasibility constraints in the trajectory
+generation phase, but rather verifying feasibility a posteriori.
+For certain classes of trajectories, explicit guarantees can be
+given on the existence of feasible motion primitives as a function
+of the problem data. Specifically, for rest-to-rest manoeuvres, a
+bound on the motion primitive duration is explicitly calculated
+as a function of the distance to be translated and the system’s
+input constraints. Furthermore, bounds on the velocity during
+the rest-to-rest manoeuvre are explicitly calculated, and it is
+shown that the position feasibility of rest-to-rest trajectories can
+be directly asserted if the allowable flight space is convex.
+An experimental demonstration of the algorithm is presented
+where the motion primitive generator is encapsulated in a highlevel trajectory generation algorithm. The goal is for a quadrocopter with an attached net to catch a thrown ball. The catching
+trajectories must be generated in real time, because the ball’s
+flight is not repeatable. Furthermore, for a given ball trajectory,
+the ball can be caught in many different ways (quadrocopter
+positions and orientations). The computational efficiency of the
+presented approach is exploited to do an exhaustive search over
+these possibilities in real time.
+An implementation of the algorithm presented in this paper
+in both C++ and Python is made available in [19].
+This paper follows on previous work presented at conferences [20], [21]. A related cost function, the same dynamics
+model, and a related decoupled planning approach were presented in [20]. Preliminary results of the fundamental stateto-state motion primitive generation algorithm were presented
+in [21]. This paper extends these previous results by presenting
+the following:
+1) conditions under which primitives are guaranteed to be
+feasible;
+2) an investigation into the completeness of the approach,
+by comparing rest-to-rest trajectories to the time optimal
+rest-to-rest trajectories;
+3) a challenging novel demonstration to show the capabilities
+of the approach.
+The remainder of this paper is organized as follows: The
+quadrocopter model and problem statement are given in
+Section II, with the motion primitive generation scheme presented in Section III. A computationally efficient algorithm
+to determine feasibility of generated trajectories is presented
+in Section IV. The choice of coordinate system is discussed
+in Section V. In Section VI, classes of problems are discussed
+where the existence of feasible trajectories can be guaranteed.
+The performance of the presented approach is compared with
+the system’s physical limits in Section VII. The computational
+cost of the algorithm is measured in Section VIII, and the
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1296
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+in the body-fixed frame, as illustrated in Fig. 2. Finally, [[ω×]]
+is the skew-symmetric matrix form of the vector cross product
+such that
+⎤
+⎡
+0
+−ω3 ω2
+⎥
+⎢
+0
+−ω1 ⎦.
+(3)
+[[ω×]] = ⎣ ω3
+−ω2
+
+ω1
+
+0
+
+demonstration of catching a ball is presented in Section IX.
+A conclusion is given in Section X.
+
+It should be noted that the preceding model may also be applied to other multirotor vehicles, such as hexa- and octocopters.
+This is because the high-bandwidth angular rate controller that
+maps angular velocity errors to motor forces effectively hides
+the number and locations of the propellers.
+1) Feasible inputs: The achievable thrust f produced by the
+vehicle lies in the range
+
+II. SYSTEM DYNAMICS AND PROBLEM STATEMENT
+
+0 ≤ fm in ≤ f ≤ fm ax
+
+Fig. 2. Dynamic model of a quadrocopter, acted upon by gravity g, a thrust
+force f pointing along the (body-fixed) axis e3 , and rotating with angular
+rate ω = (ω 1 , ω 2 , ω 3 ), with its position in inertial space given as (x1 , x2 , x3 ).
+
+This section describes the dynamic model used to describe
+the quadrocopter’s motion, including constraints on the quadrocopter inputs. A formal statement of the problem to be solved in
+this paper is then given, followed by an overview of the solution
+approach.
+A. Quadrocopter Dynamic Model
+The quadrocopter is modeled as a rigid body with six degrees of freedom: linear translation along the orthogonal inertial
+axes, x = (x1 , x2 , x3 ), and three degrees of freedom describing
+the rotation of the frame attached to the body with respect to the
+inertial frame, defined by the proper orthogonal matrix R. Note
+that the notation x = (x1 , x2 , x3 ) is used throughout this paper
+to compactly express the elements of a column vector.
+The control inputs to the system are taken as the scalar total thrust produced f , for simplicity normalized by the vehicle
+mass and thus having units of acceleration, and the body rates
+expressed in the body-fixed frame as ω = (ω1 , ω2 , ω3 ), as are
+illustrated in Fig. 2. It is assumed that high-bandwidth controllers are used to track these angular rate commands. Then, by
+separation of timescales, because of the vehicles’ low rotational
+inertia and their ability to produce large torques, it is assumed
+that the angular rate commands are tracked perfectly and that
+angular dynamics may be neglected. The quadrocopter’s state is
+thus 9-D and consists of the position, velocity, and orientation.
+Although more complex quadrocopter models exist that incorporate, for example, aerodynamic drag [22] or propeller
+speeds [23], the preceding model captures the most relevant
+dynamics and yields tractable solutions to the trajectory generation problem. Furthermore, in many applications (for example,
+model predictive control), such a simple model is sufficient, with
+continuous replanning compensating for modeling inaccuracies.
+The differential equations governing the flight of the quadrocopter are now taken as those of a rigid body [24]
+ẍ = R e3 f + g
+
+(1)
+
+Ṙ = R [[ω×]]
+
+(2)
+
+with g being the acceleration due to gravity as expressed in the
+inertial coordinate frame, and e3 = (0, 0, 1) a constant vector
+
+(4)
+
+where fm in is nonnegative because of the fixed sense of rotation of the fixed-pitch propellers. The magnitude of the angular
+velocity command is taken to be constrained to lie within a ball:
+ω ≤ ωm ax
+
+(5)
+
+with · being the Euclidean norm. This limit could be due,
+for example, to saturation limits of the rate gyroscopes, or motion limits of cameras mounted on the vehicle. Alternatively,
+a designer may use this value as a tuning factor to encode the
+dynamic regime where the low-order dynamics of (1) and (2)
+effectively describe the true quadrocopter. The Euclidean norm
+is chosen for computational convenience, specifically invariance
+under rotation.
+B. Problem Statement
+Define σ(t) to be translational variables of the quadrocopter,
+consisting of its position, velocity, and acceleration, such that
+σ(t) = (x(t), ẋ(t), ẍ(t)) ∈ R9 .
+
+(6)
+
+Let T be the goal duration of the motion, and let σ̂i be components of desired translational variables at the end of the motion, for some i ∈ I ⊆ {1, 2, . . . , 9}. Let the trajectory goal be
+achieved if
+σi (T ) = σ̂i
+
+∀i ∈ I.
+
+(7)
+
+Furthermore, the quadrocopter is subject to Nc translational
+constraints of the form
+aTj σ(t) ≤ bj for t ∈ [0, T ] ,
+
+j = 1, 2, . . . , Nc .
+
+(8)
+
+An interpretation of these translational constraints is given at
+the end of this section.
+The problem addressed in this paper is to find quadrocopter
+inputs f (t), ω(t) over [0, T ], for a quadrocopter starting at some
+initial state consisting of position, velocity, and orientation, at
+time t = 0 to an end state at time T satisfying (7), while satisfying throughout the trajectory:
+1) the vehicle dynamics (1), (2);
+2) the input constraints (4), (5);
+3) the Nc affine translational constraints (8).
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+Discussion: It should be noted that the nine quadrocopter
+state variables as described in Section II-A (three each for position, velocity, and orientation) are not the nine translational
+variables. Only eight components of the state are encoded in the
+translational variables, consisting of the quadrocopter’s position, its velocity, and two components of the orientation (which
+are encoded through the acceleration). These two orientation
+components are those that determine the direction of the quadrocopter’s thrust vector—given an acceleration value, the quadrocopter’s thrust direction Re3 can be recovered through (1).
+These are the same components encoded by the Euler roll
+and pitch angles. The translational variables do not encode the
+quadrocopter’s rotation about the thrust axis (the Euler yaw
+angle).
+These variables are chosen because they are computationally
+convenient, while still being useful to encode many realistic
+problems. Two example problems are given as follows:
+1) To-rest manoeuvre: Let the goal be to arrive at some point
+in space, at rest, at time T . Then, all nine translational variables
+will be specified in (7), with specifically the components corresponding to velocity and acceleration set to zero. Similarly, if the
+goal is simply to arrive at a point in space, but the final velocity
+and acceleration do not matter, only the first three components
+of σ̂ are specified.
+2) Landing on a moving platform: To land the quadrocopter
+on a moving, possibly slanted platform, the goal end position
+and velocity are set equal to those of the platform at time T . The
+end acceleration is specified to be such that the quadrocopter’s
+thrust vector e3 is parallel to the normal vector of the landing
+platform. Then, the quadrocopter will arrive with zero relative
+speed at the platform and touch down flatly with respect to the
+platform.
+The affine translational constraints of (8) are also chosen for
+computational convenience. They allow to encode, for example,
+that the position may not intersect a plane (such as the ground,
+or a wall), or specify a box constraint on the vehicle velocity.
+Constraints on the acceleration, in conjunction with (4), can be
+interpreted as limiting the tilt of the quadrocopter, by (1).
+III. MOTION PRIMITIVE GENERATION
+Given an end time T and goal translational variables σ̂i , the
+dynamic model of Section II-A is used to generate motion primitives guiding the quadrocopter from some initial state to a state
+achieving the goal translational variables. The input constraints,
+and the affine state constraints, are ignored at this stage, and
+the motion primitives are generated in the quadrocopter’s jerk.
+Each of the three spatial axes is solved for independently. The
+generated motion primitive minimizes a cost value for each axis
+independently of the other axes, but the total cost is shown to be
+representative of the aggressiveness of the true system inputs.
+Constraints on the input and state are considered in Sections IV
+and VI.
+A. Formulating the Dynamics in Jerk
+We follow [10] in planning the motion of the quadrocopter
+in terms of the jerk along each of the axes, allowing the system
+
+1297
+
+to be considered as a triple integrator in each axis. By ignoring
+the input constraints, the axes can be decoupled, and motions
+generated for each axis separately. These decoupled axes are
+then recombined in later sections when considering feasibility.
+This section will describe how to recover the thrust and body
+rates inputs from such a thrice differentiable trajectory.
+Given a thrice differentiable motion x(t), the jerk is written
+... ... ...
+...
+as j = x = ( x 1 , x 2 , x 3 ). The input thrust f is computed by
+applying the Euclidean norm to (1):
+f = ẍ − g .
+
+(9)
+
+Taking the first derivative of (1) and (9) yields
+j = R[[ω×]]e3 f + Re3 f˙
+
+(10)
+
+f˙ = eT3 R−1 j.
+
+(11)
+
+After substitution and evaluating the product [[ω×]]e3 , it can
+be seen that the jerk j and thrust f fix two components of the
+body rates:
+⎡
+⎡
+⎤
+⎤
+1 0 0
+ω2
+1⎢
+⎢
+⎥
+⎥ −1
+(12)
+⎣ −ω1 ⎦ = ⎣ 0 1 0 ⎦R j.
+f
+0
+0 0 0
+Note that ω3 does not affect the linear motion and is, therefore,
+not specified. Throughout the rest of the paper, it will be taken
+as ω3 = 0.
+B. Cost Function
+The goal of the motion primitive generator is to compute a
+thrice differentiable trajectory which guides the quadrocopter
+from an initial state to a (possibly only partially defined) final
+state in a final time T , while minimizing the cost function
+
+1 T
+JΣ =
+j(t)2 dt.
+(13)
+T 0
+This cost function has an interpretation as an upper bound on
+the average of a product of the inputs to the (nonlinear, coupled)
+quadrocopter system: rewriting (12) and taking ω3 = 0 gives
+⎡
+
+ω2
+
+⎤ 2
+
+⎢
+⎥
+f 2 ω2 = f ⎣ −ω1 ⎦
+0
+
+⎡
+
+⎤
+
+1
+
+0
+
+0
+
+⎢
+= ⎣0
+
+1
+
+⎥
+0 ⎦R−1 j
+
+0
+
+0
+
+0
+
+≤ j2
+
+2
+
+(14)
+
+so that
+1
+T
+
+ T
+
+f (t)2 ω(t)2 dt ≤ JΣ .
+
+(15)
+
+0
+
+If multiple motion primitives exist that all achieve some highlevel goal, this cost function may thus be used to rank the input aggressiveness of the primitives. The cost function is also
+computationally convenient, and closed-form solutions for the
+optimal trajectories are given below.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1298
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+C. Axes Decoupling and Trajectory Generation
+The nonlinear trajectory generation problem is simplified by
+decoupling the dynamics into three orthogonal inertial axes and
+treating each axis as a triple integrator with jerk used as control
+input. The true control inputs f and ω are then recovered from
+the jerk inputs using (9) and (12). The final state is determined
+from the goal end state components σ̂i relevant to each axis, and
+the duration T is given.
+The cost function of the 3-D motion, JΣ , is decoupled into a
+per-axis cost Jk by expanding the integrand in (13):
+3
+
+JΣ =
+
+Jk , where Jk =
+k =1
+
+1
+T
+
+ T
+jk (t)2 dt.
+
+(16)
+
+0
+
+For each axis k, the state sk = (pk , vk , ak ) is introduced,
+consisting of the scalars position, velocity, and acceleration.
+The jerk jk is taken as input, such that
+ṡk = fs (sk , jk ) = (vk , ak , jk ) .
+
+(17)
+
+from which the optimal state trajectory follows from integration
+of (17):
+⎡ α 5
+⎤
+β 4
+γ 3
+a0 2
+120 t + 24 t + 6 t + 2 t + v0 t + p0
+⎢
+⎥
+β 3
+γ 2
+α 4
+⎥ (22)
+s∗ (t) = ⎢
+24 t + 6 t + 2 t + a0 t + v0
+⎣
+⎦
+β 2
+α 3
+6 t + 2 t + γt + a0
+
+with the integration constants set to satisfy the initial condition s(0) = (p0 , v0 , a0 ).
+The remaining unknowns α, β, and γ are solved for as a
+function of the desired end translational variable components σ̂i
+as given in (7).
+1) Fully Defined End Translational State: Let the desired
+end position, velocity, and acceleration along this axis be s(T ) =
+(pf , vf , af ), given by the components σ̂i . Then, the unknowns α, β, and γ are isolated by reordering (22):
+⎤
+⎡ 1 5 1 4 1 3 ⎤⎡ ⎤ ⎡
+Δp
+α
+120 T
+24 T
+6T
+⎥
+⎥⎢ ⎥ ⎢
+⎢ 1 4
+1 3
+1 2 ⎥⎢ ⎥
+⎢
+⎥
+⎢ T
+(23)
+6T
+2 T ⎦⎣ β ⎦ = ⎣ Δv ⎦
+⎣ 24
+1 3
+1 2
+Δa
+γ
+T
+T
+T
+6
+
+Note again that the input constraints of Section II-A are not
+considered here, during the planning stage, but are deferred to
+Sections IV and VI.
+For the sake of readability, the axis subscript k will be discarded for the remainder of this section where only a single axis
+is considered. The time argument t will similarly be neglected
+where it is considered unambiguous.
+The optimal state trajectory can be solved straightforwardly
+with Pontryagin’s minimum principle (see, e.g., [25]) by introducing the costate λ = (λ1 , λ2 , λ3 ) and defining the Hamiltonian function H(s, j, λ):
+1 2
+j + λT fs (s, j)
+T
+1
+= j 2 + λ1 v + λ2 a + λ3 j
+T
+
+H(s, j, λ) =
+
+(18)
+
+λ̇ = −∇s H(s∗ , j ∗ , λ) = (0, −λ1 , −λ2 )
+
+(19)
+
+where jk∗ and s∗k represent the optimal input and state trajectories, respectively.
+The costate differential (19) is easily solved, and for later
+convenience, the solution is written in the constants α, β, and γ,
+such that
+⎡
+λ(t) =
+
+1⎢
+⎣
+T
+
+−2α
+2αt + 2β
+
+⎤
+⎥
+⎦.
+
+(20)
+
+−αt2 − 2βt − 2γ
+
+j ∗ (t) = arg min H(s∗ (t), j(t), λ(t))
+j (t)
+
+1 2
+αt + βt + γ
+2
+
+⎡
+
+Δp
+
+⎤
+
+⎡
+
+⎢
+⎥ ⎢
+⎢ Δv ⎥ = ⎢
+⎣
+⎦ ⎣
+Δa
+
+pf − p0 − v0 T − 12 a0 T 2
+vf − v0 − a0 T
+
+⎤
+⎥
+⎥.
+⎦
+
+(21)
+
+(24)
+
+af − a0
+
+Solving for the unknown coefficients yields
+⎡ ⎤
+⎡
+⎤
+α
+720
+−360T
+60T 2 ⎡ Δp ⎤
+⎢ ⎥
+⎢
+⎥
+⎥
+⎢ β ⎥ = 1 ⎢ −360T 168T 2 −24T 3 ⎥⎢
+⎣ ⎦ T5 ⎣
+⎦⎣ Δv ⎦.
+Δa
+γ
+60T 2
+−24T 3
+3T 4
+
+(25)
+
+Thus, generating a motion primitive only requires evaluating the
+above matrix multiplication for each axis, after which the state
+along the primitive is found by evaluating (22).
+2) Partially Defined End Translational State: Components
+of the final state may be left free by σ̂. These states may correspondingly be specified as free when solving the optimal input
+trajectory, by noting that the corresponding costates must equal
+zero at the end time [25]. The closed-form solutions to the six
+different combinations of partially defined end states are given
+in Appendix A—in each case, solving the coefficients reduces
+to evaluating a matrix product.
+3) Motion Primitive Cost: The per-axis cost value of (16)
+can be explicitly calculated as follows. This is useful if multiple
+different candidate motion primitives are evaluated to achieve
+some higher level goal. In this case, the primitive with the lowest
+cost can be taken as the “least aggressive” in the sense of (14)
+1
+1
+J = γ 2 + βγT + β 2 T 2 + αγT 2
+3
+3
+1
+1
++ αβT 3 + α2 T 4 .
+4
+20
+
+The optimal input trajectory is solved for as
+
+=
+
+where
+
+2
+
+(26)
+
+Note that this cost holds for all combinations of end translational variables.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+IV. DETERMINING FEASIBILITY
+The motion primitives generated in the previous section did
+not take the input feasibility constraints of Section II-A1 into
+account—this section revisits these and provides computationally inexpensive tests for the feasibility/infeasibility of a given
+motion primitive with respect to the input constraints of (4)
+and (5). This section also provides a computationally inexpensive method to calculate the extrema of an affine combination of
+the translational variables along the primitive, allowing to test
+constraints of the form (8). In Section VI, conditions are given
+under which feasible motion primitives are guaranteed to exist.
+A. Input Feasibility
+Given some time interval T = [τ1 , τ2 ] ⊆ [0, T ] and three
+triple integrator trajectories of the form (22) with their corresponding jerk inputs jk (t), the goal is to determine whether
+corresponding inputs to the true system f and ω, as used in
+(1) and (2), satisfy feasibility requirements of Section II-A1.
+The choice of T is revisited when describing the recursive implementation, below. The tests are designed with a focus on
+computational speed and provide sufficient, but not necessary,
+conditions for both feasibility and infeasibility—meaning that
+some motion primitives will be indeterminable with respect to
+these tests.
+1) Thrust: The interval T is feasible with respect to the
+thrust limits (4) if and only if
+max f (t)2 ≤ fm2 ax and
+
+(27)
+
+min f (t)2 ≥ fm2 in .
+
+(28)
+
+t∈T
+
+t∈T
+
+¯k and ẍk , respectively) can be found in closed form
+(denoted ẍ
+by solving for the roots of a quadratic and evaluating ẍk − gk at
+at most two points strictly inside T , and at the boundaries of T .
+The extrema of (ẍk − gk )2 then follow as
+¯2k , ẍ2k }
+max (ẍk (t) − gk )2 = max {ẍ
+
+f 2 = ẍ − g2 =
+
+(ẍk − gk )2
+
+(29)
+
+k =1
+
+where gk is the component of gravity in axis k. Combining (27)–
+(29), the thrust constraints can be interpreted as spherical constraints on the acceleration.
+By taking the per-axis extrema of (29), the below bounds
+follow:
+max (ẍk (t) − gk )2 ≤ max f (t)2 for k ∈ {1, 2, 3}
+t∈T
+
+t∈T
+
+(30)
+
+min (ẍk (t) − gk )2 =
+t∈T
+
+¯2 , ẍ2k },
+min {ẍ
+k
+
+¯k · ẍk ≥ 0
+if ẍ
+
+0,
+
+otherwise
+
+¯2k , ẍ2k } > fm ax .
+max {ẍ
+
+t∈T
+
+k =1
+
+t∈T
+
+(31)
+
+(35)
+
+Similarly, from (31) and (32), a sufficient criterion for feasibility is if both
+3
+
+¯2k , ẍ2k } ≤ fm ax and
+max {ẍ
+
+(36)
+
+¯2k , ẍ2k } ≥ fm in
+min {ẍ
+
+(37)
+
+k =1
+3
+
+k =1
+
+hold. If neither criterion (35) nor (36), (37) applies, the section
+is marked as indeterminate with respect to thrust feasibility.
+2) Body Rates: The magnitude of the body rates can be
+bounded as a function of the jerk and thrust as follows:
+ω12 + ω22 ≤
+
+1
+j2 .
+f2
+
+(38)
+
+This follows from squaring (12), and using the following induced norm:
+⎡
+⎤
+1 0 0
+⎢
+⎥
+(39)
+⎣ 0 1 0 ⎦ ≤ 1.
+0
+
+0
+
+0
+
+The right-hand side of (38) can be bounded from above by ω̄ 2 ,
+defined as follows, which then also provides an upper bound for
+the sum ω12 + ω22 . The terms in the denominator are evaluated
+as in (34)
+3
+
+max (ẍk (t) − gk )2
+
+(34)
+
+¯k · ẍk < 0 implies a sign change (and thus a zero crosswhere ẍ
+ing) of ẍk (t) − gk in T .
+Thus, from (30), a sufficient criterion for input infeasibility
+of the section is if
+
+3
+
+max f (t)2 ≤
+
+(33)
+
+t∈T
+
+Squaring (9) yields
+3
+
+1299
+
+ω12 + ω22 ≤
+
+1
+j2 ≤ ω̄ 2 =
+f2
+
+max jk (t)2
+
+k =1 t∈T
+3
+
+min (ẍk (t) − gk )2
+
+.
+
+k =1 t∈T
+
+3
+
+(32)
+
+(40)
+
+These bounds will be used as follows: If the left-hand side of (30)
+is greater than fm ax , the interval is definitely infeasible, while if
+the right-hand side of (31) is less than fm ax and the right-hand
+side of (32) is greater than fm in , the interval is definitely feasible
+with respect to the thrust constraints.
+Note that the value ẍk − gk as given by (22) is a third-order
+polynomial in time, meaning that its maximum and minimum
+
+Using the above equation, and assuming ω3 = 0, the time
+interval T can be marked as feasible w.r.t. the body rate input
+2
+if ω̄ 2 ≤ ωm
+ax ; otherwise, the section is marked as indeterminate.
+3) Recursive Implementation: The feasibility of a given time
+interval T ⊆ [0, T ] is tested by applying the above two tests
+on T . If both tests return feasible, T is input feasible and the
+algorithm terminates; if one of the tests returns infeasible, the
+algorithm terminates with the motion over T marked as input
+
+min f (t)2 ≥
+t∈T
+
+min (ẍk (t) − gk )2 .
+k =1
+
+t∈T
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1300
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+infeasible. Otherwise, the section is divided in half, such that
+τ 12 =
+
+τ1 + τ2
+2
+
+T1 = [τ1 , τ 12 ],
+
+(41)
+T2 = [τ 12 , τ2 ].
+
+(42)
+
+If the time interval τ 12 − τ1 is smaller than some user-defined
+minimum Δτ , the algorithm terminates with the primitive
+marked indeterminable. Otherwise, the algorithm is recursively
+applied first to T1 : If the result is feasible, the algorithm is recursively applied to T2 . If T2 also terminates as a feasible section,
+the entire primitive can be marked as feasible; otherwise, the
+primitive is rejected as infeasible/indeterminable. Thus, the test
+returns one of three outcomes.
+1) The inputs are provably feasible.
+2) The inputs are provably infeasible.
+3) The tests were indeterminate; feasibility could not be established.
+Note that the interval upper bound of (33) is monotonically
+nonincreasing with decreasing length of the interval T , and similarly, the lower bound of (34) is monotonically nondecreasing.
+Furthermore, note that as τ 12 − τ1 tends to zero, the righthand sides of (31) and (32) converge, and the thrust feasibility
+test becomes exact. This does not, however, apply to the body
+rate feasibility test due to the induced norm in (39).
+The recursive implementation of the sufficient thrust feasibility tests of (36) and (37) is visualized for an example motion
+primitive in Fig. 3.
+4) Remark on Convex Approximations of Thrust-Feasible Region: The feasible acceleration space of the vehicle follows
+from (27)–(29) and is nonconvex due to the positive minimum
+thrust value. This is visualized in Fig. 4. Nonetheless, in the
+limit, the presented recursive thrust input test allows for testing feasibility over the entire thrust feasible space. This is an
+advantage when compared with approaches that require the construction of convex approximations of the feasible space (see,
+e.g., [20]). Consider, for example, a trajectory that begins with
+zero acceleration and ends with a final acceleration of −2g (i.e.,
+the quadrocopter is upside down at the end of the manoeuvre)—
+such an example is shown in Fig. 4. The straight line connecting
+the initial and final accelerations crosses through the acceleration infeasible zone due to minimum thrust. Therefore, no convex approximation can be constructed in the acceleration space
+in which to evaluate this trajectory.
+B. Affine Translational Variable Constraints
+Referring to (22), it can be seen that calculating the range
+of some linear combination of the system’s translational variables σ(t) [of the form (8)] can be done by solving for the
+extrema of a polynomial of order at most 5. This involves finding the roots of its derivative (a polynomial of order at most 4)
+for which closed-form solutions exist [26].
+This is useful, for example, to verify that the quadrocopter
+does not fly into the ground, or that the position of the quadrocopter remains within some allowable flight space. Specifically,
+any planar position constraint can be specified by specifying
+that the inner product of the quadrocopter’s position with the
+
+Fig. 3. Visualization of the recursive implementation of the thrust feasibility
+test: The vehicle thrust limits fmin and fmax are shown as dashed lines, and the
+thrust trajectory is the dotted curve. First, the minimum and maximum bounds of
+(36) and (37) are calculated for the entire motion primitive, shown as the dashdotted lines in the top plot. Because these bounds exceed the vehicle limits,
+the section is halved, and the tests are applied to each half (second plot). The
+left-hand side section’s bounds are now within the limits; therefore, this section
+is marked feasible with respect to the thrust bounds (shown shaded in the plot),
+while the second half is again indeterminate. This is halved again, in the third
+plot, and a section is yet again halved in the fourth plot. Now, all sections are
+feasible with respect to the thrust limits, and the test terminates. Note that, in the
+implementation, the thrust infeasibility test of (35) and the body rate feasibility
+test (40) will be done simultaneously.
+
+normal of the plane is greater than some constant value. It can
+also be used to calculate a bound on the vehicle’s maximum
+velocity, which could be useful in some computer vision applications (see, e.g., [27]). Furthermore, an affine bound on the
+vehicle’s acceleration can be interpreted as a bound on the tilt
+of the quadrocopter’s e3 axis, through (1).
+V. CHOICE OF COORDINATE SYSTEM
+Because the Euclidean norm used in the cost (13) is invariant
+under rotation, the optimal primitive for some given problem
+will be the same when the problem is posed in any inertial
+frame, despite the axes being solved for independently of one
+another.
+The Euclidean norm is also used in the feasibility tests of
+Section IV. In the limit, as the length of the time interval T
+tends to zero, both the thrust and body rates feasibility tests
+become invariant under rotation, and thus independent of the
+choice of coordinate system. The affine constraints of Section
+IV-B can be trivially transformed from one coordinate system
+to another, such that there exists no preferred coordinate system
+for a set of constraints. This allows the designer the freedom
+to pose the motion primitive generation problem in the most
+convenient inertial coordinate system.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+1301
+
+Fig. 4. Example trajectory demonstrating nonconvexity of the feasible acceleration space. The trajectory moves an initially stationary quadrocopter 10 m
+horizontally, ending at zero velocity and with final acceleration af = −2g in 2 s (i.e., the quadrocopter is upside down at the end). The left-most plot shows the
+position trajectory of the vehicle, and the middle plots show the inputs during the trajectory (with the shaded regions being infeasible). The right-hand side plot
+shows the acceleration trajectory in the acceleration space, where the two concentric circles represent the minimum and maximum thrust limits (and are centered
+at g) for ẍ2 = 0. The axes are chosen such that x3 points opposite to gravity, and there is no motion along x2 . Note the nonconvexity of the feasible acceleration
+space.
+
+VI. GUARANTEEING FEASIBILITY
+For some classes of trajectory, the existence of a feasible
+motion primitive can be guaranteed a priori, without running
+the tests described in the preceding section.
+For the specific case of primitives starting and ending at rest
+(zero velocity, zero acceleration, and a given end point), a bound
+on the end time T will be explicitly calculated in dependence
+of the translation distance, such that any end time larger than
+this bound is guaranteed to be feasible with respect to the input
+constraints. Furthermore, the position trajectory for such rest-torest primitives is shown to remain on the straight line segment
+between the initial and final positions. Thus, given a convex
+allowable flight space, all primitives that start and end at rest
+and within the allowable flight space will remain within the
+allowable flight space for the entire trajectory.
+The input feasibility of general motion primitives, with arbitrary initial and final accelerations and velocities, is also briefly
+discussed. It should be noted that those motion primitives that
+can be guaranteed to be feasible a priori will be a conservative
+subset of the primitives that can be shown to be feasible a posteriori using the recursive tests described in Section IV. Further
+discussion is provided in Section VII.
+
+A. Rest-to-Rest Primitives
+First, an upper bound on the lowest end time T at which a restto-rest primitive becomes feasible with respect to the input constraints is calculated in dependence of the translation distance.
+Without loss of generality, it is assumed that the quadrocopter’s
+initial position coincides with the origin, and the problem is
+posed in a reference frame such that the final position is given
+as (pf , 0, 0), with pf being the distance from the origin to the
+final location, such that pf ≥ 0.
+From (25), it is clear that the optimal position trajectory
+along x2 and x3 has zero position for the duration of the primitive and, therefore, also zero acceleration and velocity.
+
+1) Input Feasibility: The acceleration trajectory along axis 1
+is calculated by solving the motion coefficients with (25), and
+then substituting into (22), such that
+t
+t2
+t3
+p
+−
+180
+p
++
+120
+pf .
+(43)
+f
+f
+T3
+T4
+T5
+Introducing the variable ξ ∈ [0, 1] such that t = ξT , and substituting for the above yields
+ẍ1 (t) = 60
+
+60pf
+ξ − 3ξ 2 + 2ξ 3
+(44)
+T2
+for which the extrema lie at
+√
+3
+1
+∗
+ξ = ±
+(45)
+2
+6
+√
+10 3pf
+ẍ1 (ξ ∗ T ) = ∓
+.
+(46)
+3T 2
+Exploiting the observation that |ẍ(ξ ∗ T )| decreases monotonically with increasing T , an upper bound Tf m i n for the end time
+at which such a primitive becomes feasible with respect to the
+minimum thrust constraint can be calculated. This is done by
+substituting (46) for the sufficient criterion of (32), under the
+worst-case assumption that the motion is aligned with gravity,
+i.e., the acceleration in the directions perpendicular to gravity
+are zero. Then
+
+10pf
+.
+(47)
+Tf m i n = √
+3 (g − fm in )
+ẍ1 (ξT ) =
+
+Similarly, an upper bound Tf m a x for the end time at which
+the primitive becomes feasible with respect to the maximum
+thrust constraint can be calculated by substituting the maximum
+acceleration bound of (46) into the sufficient criterion of (31).
+Again, the worst case occurs when the motion is aligned with
+gravity, and the final time can be calculated as
+
+10pf
+.
+(48)
+Tf m a x = √
+3 (fm ax − g)
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1302
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+Finally, an upper bound Tω m a x for the end time at which
+the primitive satisfies the body rates constraint is calculated as
+follows. First, the jerk along axis 1 is solved for with (21),
+and t = ξT is substituted as before, to give
+j1 (ξT ) =
+
+60pf
+6ξ 2 − 6ξ + 1 .
+T3
+
+(49)
+
+This has extrema at ξ ∈ {0, 12 , 1}, and the maximum of |j1 (ξT )|
+∗
+occurs at ξ ∈ {0, 1} so that
+
+max |ji (t)| = |ji (ξ ∗ T )| =
+
+t∈[0,T ]
+
+60pf
+.
+T3
+
+(50)
+
+Again, this maximum is monotonically decreasing for increasing end time T .
+This value is then substituted for the numerator of (40), and
+it is assumed that the primitive satisfies the minimum thrust
+constraint so that fm in can be substituted for the denominator.
+This makes the conservative assumption that the maximum jerk
+value is achieved at the same time as the minimum thrust value.
+Equating the result to ωm ax and solving for Tω m a x yields
+
+60pf
+.
+(51)
+Tω m a x = 3
+ωm ax fm in
+Note that this requires fm in to be strictly positive [instead of
+nonnegative as specified in (4)].
+Combining (47), (48), and (51), any rest-to-rest primitive
+within a ball of radius pf is guaranteed to be feasible with
+respect to the input constraints of Section II-A1 if the end time T
+is chosen to satisfy the below bound:
+T ≥ max{Tf m i n , Tf m a x , Tω m a x }.
+
+(52)
+
+The conservatism of this bound is investigated in Section VII.
+2) Position Feasibility: It will be shown that the position
+along a rest-to-rest primitive remains on the straight line segment
+between the initial and final positions, independent of the end
+time T . Solving the full position trajectory as given in Section
+III-C1 and substituting p0 = 0, v0 = vf = 0, and a0 = af = 0,
+the position trajectory in axis 1 is given by
+ 5
+
+t4
+t3
+t
+(53)
+x1 (t) = pf 6 5 − 15 4 + 10 3
+T
+T
+T
+with pf ≥ 0 being the desired displacement along axis 1. Substituting again for ξ = t/T such that ξ ∈ [0, 1], the position
+trajectory can be rewritten as
+x1 (ξT ) = pf 6ξ 5 − 15ξ 4 + 10ξ 3 .
+
+(54)
+
+It is now straight forward to show that the extrema of x1 (ξT )
+are at ξ ∗ ∈ {0, 1}, and specifically that
+x1 (t) ∈ [0, pf ] .
+
+3) Maximum Velocity: In some applications, it is desirable
+to limit the maximum velocity of the vehicle along the motion,
+most notably where the quadrocopter’s pose is estimated with
+onboard vision [27]. For rest-to-rest primitives of duration T ,
+the maximum speed occurs at t = T /2 and equals
+
+(55)
+
+Axes 2 and 3 will remain at zero so that the rest-to-rest primitive will travel along the straight line segment connecting the
+initial and final positions in three dimensional space. Therefore,
+given a convex allowable flight space, if the initial and final position are in the allowable flight space, all rest-to-rest primitives
+will remain within the allowable flight space.
+
+max ẋ(t) = max |ẋ1 (t)| =
+
+t∈[0,T ]
+
+t∈[0,T ]
+
+15 pf
+.
+8 T
+
+(56)
+
+Thus, given some maximum allowable velocity magnitude and a
+distance to translate, the primitive end time T at which this maximum velocity will not be exceeded can be readily calculated
+from the above.
+B. Guarantees for General Primitives
+For general primitives, with nonzero initial and/or final conditions, and with possibly unconstrained end states, it is harder to
+provide conditions under which feasible primitives can be guaranteed. Indeed, cases can be input feasible for some specific
+end times, but become infeasible if the time is extended. It can,
+however, be stated for a motion primitive along an axis k (with
+arbitrary initial and final conditions and with any combination
+of final translational variable constraints in the goal state) that
+as the end time T tends to infinity:
+1) the magnitude of the jerk trajectory tends to zero, and
+2) the magnitude of the acceleration trajectory becomes independent of both initial and final position and velocity
+constraints and can be bounded as
+lim
+
+max ẍk (t) ≤ max{|ak 0 | , |ak f |}
+
+(57)
+
+lim
+
+min ẍk (t) ≥ − max{|ak 0 | , |ak f |}.
+
+(58)
+
+T →∞ t∈[0,T ]
+T →∞ t∈[0,T ]
+
+If the final acceleration is not specified, the acceleration bounds
+are
+lim
+
+max ẍk (t) ≤ |ak 0 |
+
+(59)
+
+lim
+
+min ẍk (t) ≥ − |ak 0 | .
+
+(60)
+
+T →∞ t∈[0,T ]
+T →∞ t∈[0,T ]
+
+The calculations to show this can be found in Appendix B.
+This knowledge can then be combined with the input feasibility constraints (similar to the rest-to-rest primitives, above)
+to guarantee the existence of an input feasible motion primitive
+based on the values of |a0 | and |af |, at least as the end time
+is extended to infinity. Furthermore, by expanding the acceleration trajectory from (22) and applying the triangle inequality,
+the magnitude of the acceleration for finite end times can also
+be bounded. This bound can then be used to calculate an upper
+bound on the end time T at which the primitive will be feasible
+with respect to the inputs; however, this bound will typically be
+very conservative.
+ALGORITHM OVERVIEW
+The focus in the preceding sections is on the generation and
+feasibility verification for a quadrocopter motion primitive, with
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+1303
+
+an arbitrary initial state, to a set of goal end translational variables σ̂i in a given time T . The resulting acceleration trajectory,
+along any axis, is a cubic polynomial in time. These trajectories
+minimize an upper bound representative of a product of the inputs, and computationally convenient methods are presented to
+test whether these trajectories are feasible with respect to input
+constraints, and with respect to bounds on linear combinations
+of the translational variables. Guarantees on feasible trajectories
+are given, with a specific focus on rest-to-rest trajectories.
+In the following section, the set of end times and goal end
+translational variables for which feasible trajectories can be
+found with the presented approach is compared with the total set
+of feasible trajectories, for the class of rest-to-rest trajectories.
+The computational cost of the presented approach is investigated
+in Section VIII. Section IX describes an experimental demonstration, where the presented primitives are incorporated into a
+larger trajectory generator.
+VII. CONSERVATISM
+If the motion primitive computed with the presented approach
+is not feasible, it does not imply that no feasible trajectory is
+possible. There are two reasons for this.
+1) The trajectories generated in Section III are restricted
+to have accelerations described by cubic polynomials in
+time.
+2) The feasibility verification of Section IV is sufficient, but
+not necessary.
+This section attempts to give an indication of the space of
+end times T and end translational variables σ̂i for which a
+quadrocopter could fly a trajectory, but the presented method
+is unable to find a feasible motion primitive. This section will
+specifically consider rest-to-rest motions.
+In [28], an algorithm is given to compute minimum time trajectories which satisfy Pontryagin’s minimum principle, for the
+quadrocopter system dynamics and input constraints of Section
+II-A. These trajectories represent the surface of the feasible region for quadrocopter rest-to-rest trajectories: given a desired
+final translation, a feasible trajectory exists with any end time
+larger than the time optimal end time (e.g., by executing the
+time optimal trajectory, and then simply waiting). By definition,
+no feasible trajectory exists for shorter end times.
+Fig. 5 compares this feasible region to those trajectories that
+can be found with the methods of Sections III and IV. The system
+limits were set as in [28], with fm in = 1 m/s2 , fm ax = 20 m/s2 ,
+ωm ax = 10 rad/s. For a given translation distance d, the desired
+end translational variables are defined such that all components
+are zero, except the position in the direction of motion which is
+set to d.
+For each distance d, the space of feasible end times was
+determined as follows. A set of end times was generated, starting
+at zero and with increments of 1ms. For each end time, a motion
+primitive was generated, and the set of end distances and end
+times (T, d) for which an input feasible trajectory was found
+is shown in Fig. 5. For the sake of comparison, the guaranteed
+feasible end time given in Section VI-A is also plotted.
+
+Fig. 5. Set of horizontal/vertical final displacements for which the presented
+algorithm is able to find input feasible trajectories (the lightly shaded area above
+the dashed line), and the set of final displacements and end times for which no
+trajectories are possible (the darkly shaded area, with the boundary as given
+by the time optimal trajectories of [28]). The dotted line is the conservative
+end time guarantee as calculated in Section VI-A. The white area represents
+displacements that could be reached by the vehicle, but where the presented
+method cannot find a feasible motion primitive.
+
+The fastest feasible manoeuvre found with the presented algorithm requires on the order of 50% longer than the time optimal
+trajectory of [28] when translating vertically, and on the order
+of 20% longer when translating horizontally. From the figure, it
+can be seen that the guaranteed feasible end time of Section VI
+is quite conservative, requiring the order of three times longer
+for the manoeuvre than the time optimal trajectory. However,
+these trajectories can be computed at very low cost, specifically
+requiring no iterations to determine feasibility.
+VIII. COMPUTATION TIMES
+This section presents statistics for the computational cost of
+the presented algorithm when implemented on a standard laptop
+computer and on a standard microcontroller. The algorithm was
+implemented in C++. Except for setting the compiler optimisation to maximum, no systematic attempt was made to optimize
+the code for speed. To evaluate the time required to compute
+the motion primitives described in this paper, primitives were
+generated for a quadrocopter starting at rest, at the origin, and
+translating to a final position chosen uniformly at random in
+a box with side length 4 m, centered at the origin. The target
+end velocity and acceleration were also chosen uniformly between −2 and 2 m/s, and −2 and 2 m/s2 , respectively. The end
+time was chosen uniformly at random between 0.2 and 10s. The
+algorithm was implemented on a laptop computer with an Intel
+Core i7-3720QM CPU running at 2.6 GHz, with 8 GB of RAM,
+with the solver compiled with Microsoft Visual C++ 11.0. The
+solver was run as a single thread.
+For one hundred million such motion primitives, the
+average computation time per primitive was measured to
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1304
+
+be 1.05 μs, or approximately 950 000 primitives per second. This
+includes
+1) generating the primitive;
+2) verifying that the inputs along the trajectory are feasible (with the recursive test of Section IV-A3, for fm in =
+5 m/s2 , fm ax = 25 m/s2 , and ωm ax = 20 rad/s;
+3) verifying that the position of the quadrocopter stays within
+a 4 × 4 × 4 m box centered at the origin (that is, six affine
+constraints of the form (8) as described in Section IV-B).
+Of the primitives, 91.6% tested feasible with respect to the
+inputs, 6.4% infeasible, and the remaining 2.0% were indeterminate.
+If the position feasibility test is not performed, the average
+computation time drops to 0.74 μs, again averaged over the
+generation of one hundred million random primitives, or approximately 1.3 million per second.
+The algorithm was also implemented on the STM32-F4 microcontroller, which costs approximately €10 and is, for example, used on the open-source PX4 autopilot system [29].
+One million random primitives were generated, with the same
+parameters as above. The average execution time was 149 μs
+per primitive (or approximately 6700 primitives per second),
+including trajectory generation, input feasibility, and position
+feasibility tests. If the position feasibility test is not performed,
+the average computation time drops to 95μs per primitive, or
+approximately 10 500 per second.
+IX. EXAMPLE APPLICATION AND EXPERIMENTAL RESULTS
+This section presents an example of a high-level trajectory
+generator that uses the motion primitives to achieve a high level
+goal (as illustrated in Fig. 1). The high-level goal is for a quadrocopter, with an attached net, to catch a ball thrown by a person.
+This task was chosen due to its highly dynamic 3-D nature, the
+requirement for real-time trajectory generation, and the existence of a variety of trajectories, which would achieve the goal
+of catching the ball. All the presented data are from actual flight
+experiments.
+The algorithm is applied in a naı̈ve brute force approach,
+to illustrate the ease with which a complex, highly dynamic,
+quadrocopter task may be encoded and solved. The multimedia
+attachment contains a video showing the quadrocopter catching
+the ball.
+To catch the ball, the motion primitive generator is used in
+two different ways:
+1) to generate trajectories to a catching point, starting from
+the quadrocopter’s current state and ending at a state and
+time at which the ball enters the attached net;
+2) to generate stopping trajectories, which are used to bring
+the quadrocopter to rest after the ball enters the net.
+The experiments were conducted in the Flying Machine
+Arena, a space equipped with an overhead motion capture system which tracks the pose of the quadrocopters and the position
+of the balls. A PC processes the motion capture data and generates commands that are transmitted wirelessly to the vehicles
+at 50Hz. More information on the system can be found in [30].
+The quadrocopter used is a modified Ascending Technologies
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+Fig. 6. Quadrocopter with attached catching net, as used to demonstrate the
+algorithm. The center of the net is mounted above the vehicle’s center of mass
+in the quadrocopter’s e3 direction.
+
+“Hummingbird” [31], with a net attached approximately 18cm
+above the vehicle’s center of mass (see Fig. 6).
+1) Catching Trajectories: The computational speed of the
+presented approach is exploited to evaluate many different ways
+of catching the ball. This is done with a naı̈ve brute force approach, where thousands of different primitives are generated at
+every controller step. Each primitive encodes a different strategy to catch the ball, of which infeasible primitives are rejected
+and the “best” is kept from the remainder. This is done in real
+time and used as an implicit feedback law, with one controller
+cycle typically involving the evaluation of thousands of candidate motion primitives. This task is related to that of hitting a
+ball with a racket attached to a quadrocopter, as was previously
+investigated in [21] and [32].
+The catching task is encoded in the format of Section II-B by
+stipulating that the center of the net must be at the same position
+as the ball, and the velocity of the quadrocopter perpendicular
+to the ball’s flight must be zero. The requirement on the velocity reduces the impact of timing errors on the system. Because
+the center of the net is not at the center of the quadrocopter,
+the goal end state must also include the quadrocopter’s normal
+direction e3 —given some ball position, there exists a family of
+quadrocopter positions and normal directions which will place
+the center of the net at the ball’s position. The desired end translational variables σ̂ thus contains the quadrocopter’s position,
+its normal direction (thus acceleration), and its velocity components perpendicular to the ball’s velocity (thus specifying eight
+of the nine possible variables). The strategy for specifying these
+eight variables is described below.
+The ball is modeled as a point mass with quadratic drag, and
+at every controller update step, its trajectory is predicted until
+it hits the floor. This is discretized to generate a set of possible
+catching times T (k ) , with the discretization time step size chosen
+such that at most 20 end times are generated, and that the time
+step size is no smaller than the controller update period.
+For each of these possible catching times T (k ) , a set of candidate desired end translational variables σ̂ (j,k ) is generated as
+follows. The quadrocopter’s goal normal direction is generated
+by generating 49 candidate end normals, centered around the
+direction opposing the ball’s velocity at time T (k ) . To convert
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+1305
+
+Fig. 7. Sampled motion primitives at one time step of a catching manoeuvre: On the left is shown the quadrocopter’s center of mass for 81 candidate primitives
+to catch a thrown ball. The primitives are shown as solid lines, starting at the position (0, 1)m, and the ball’s predicted trajectory is shown as a dashed-dotted line,
+moving from left to right in the figure. The ball’s position at each of three candidate catching instants is shown as a solid circle. Each candidate primitive places
+the center of the net at the ball, with the quadrocopter’s velocity at that instant parallel to the ball’s velocity. Note that the final orientation is a parameter that is
+searched over, as is the thrust value at the catching instant. A total of 2812 candidates were evaluated at this time instant, which required 3.05 ms of computation.
+The primitives shown passing through the ground (at 0m height) are eliminated when the position boundaries are evaluated. The right most two plots show detail
+of some of these primitives, showing the quadrocopter’s orientation along the primitives. At the top-right plot, three candidate primitives are shown with different
+end orientations (and only showing orientations lying in the plane of the plot). The lower right plot shows primitives to the same orientation, but with varying end
+thrusts.
+
+these candidate end normals to goal accelerations, it is necessary to further specify an end thrust value for each. The goal
+acceleration can then be calculated with (1). For each of the orientations generated, ten candidate final thrust values are used,
+spaced uniformly between fm in and fm ax .
+Given an end normal direction, the required quadrocopter
+position at the catching instant can be calculated as that position
+placing the center of the net at the ball (for the 49 different
+normal direction candidates, the end location of the vehicle
+center of mass will be located on a sphere centered at the ball’s
+position).
+The quadrocopter’s velocity is required to be zero in the
+directions perpendicular to the ball’s velocity at the catching
+time, while the quadrocopter velocity component parallel to the
+ball’s velocity is left free. Thus, eight components of the end
+translational variables in (7) are specified.
+For each of the candidate catching instants, there are 490
+candidate end states to be evaluated. Because the number of end
+times is limited to 20, this means that there are at most 9800
+catching primitives of the form T (k ) , σ̂ (j,k ) calculated at any
+controller update step.
+Next the candidate primitive is tested for feasibility with respect to the inputs as described in Section IV-A, with the input limits set to fm in = 5 m/s2 , fm ax = 25 m/s2 , and ωm ax =
+20 rad/s. Then, the candidate is tested for position feasibility,
+where the position trajectory is verified to remain inside a safe
+box as described in Section IV-B—this is to remove trajectories that would either collide with the floor or the walls. If the
+primitive fails either of these tests, it is rejected.
+
+Some such candidate motion primitives are visualized in
+Fig. 7.
+For each candidate catching primitive remaining, a stopping
+trajectory will be searched for (described in more detail below).
+If no stopping trajectory for a candidate catching primitive is
+found that satisfies both the input feasibility constraints and
+position constraints, that catching candidate is removed from
+the set.
+Now, each remaining candidate is feasible with respect to
+input and position constraints, both for catching the ball, and
+the stopping manoeuvre after the ball is caught. From this set,
+that candidate with the lowest cost JΣ (as defined in Section
+III-C3) is selected as the best.
+2) Stopping Trajectories: At the catching instant, a catching
+candidate trajectory will generally have a nonzero velocity and
+acceleration, making it necessary to generate trajectories from
+this state to rest. For these stopping trajectories, the goal end state
+translational variables specify that the velocity and acceleration
+must be zero, but leave the position unspecified. The primitive
+duration is sampled from a set of six possibilities, ranging from
+2 down to 0.25 s. The search is terminated after the first stopping
+primitive is found that is feasible with respect to the inputs and
+the position constraints. Two such stopping primitives are shown
+in Fig. 8.
+3) Closed-Loop Control: Each remaining candidate catching primitive is feasible with respect to the input constraints, the
+position box constraints, and has a feasible stopping primitive.
+From these, the catching candidate with the lowest cost value is
+then selected as the best. This algorithm is then applied as an
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1306
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+Fig. 8. Sampled stopping motion primitives: Two candidate stopping primitives bringing the quadrocopter to rest, starting at the catching instant of the
+optimal catching primitive from Fig. 7. The quadrocopter moves from right to
+left in both figures. The upper stopping candidate brings the quadrocopter to
+rest in 2 s, the lower in 1 s.
+
+implicit feedback law, as in model-predictive control [33], such
+that the entire process is repeated at the controller frequency
+of 50 Hz—thus, the high-level trajectory generator must run in
+under 20ms. This allows the system to implicitly update the
+trajectories as the prediction of the ball’s flight becomes more
+precise, as well as compensate for disturbances acting on the
+quadrocopter.
+If no candidate catching primitive remains, the last feasible
+trajectory is used as reference trajectory, tracked under feedback control. This typically happens at the end of the motion,
+as the end time goes to zero. After the ball is caught, the stopping primitive is executed. The stopping primitive is used as a
+reference trajectory tracked by the controller described in [30].
+The completed catching trajectory corresponding to the candidates of Fig. 7 is shown in Fig. 9. The catching manoeuvre
+lasted 1.63 s, during which a total of 375 985 motion primitives
+were evaluated (including both catching and stopping manoeuvres). To catch the ball, the quadrocopter translated a distance
+of 2.93 m, having started at rest.
+The attached video shows that the quadrocopter manages to
+catch thrown balls, validating the brute-force approach used to
+encode this problem. The video also shows the acrobatic nature
+of the resulting manoeuvres.
+X. CONCLUSION
+This paper has presented a motion primitive that is computationally efficient both to generate and to test for feasibility.
+The motion primitive starts at an arbitrary quadrocopter state
+and generates a thrice differentiable position trajectory guiding
+the quadrocopter to a set of desired end translational variables
+(consisting of any combination of components of the vehicle’s
+position, velocity, and acceleration). The acceleration allows
+for the encoding of two components of the vehicle’s attitude.
+The time to calculate a motion primitive and apply input and
+translational feasibility tests is shown to be on the order of a
+microsecond on a standard laptop computer.
+The algorithm is experimentally demonstrated by catching
+a thrown ball with a quadrocopter, where it is used as part of
+an implicit feedback controller. In the application, thousands of
+
+Fig. 9. Actual trajectory flown to catch the ball shown in Fig. 7. The top-most
+plot shows the ball’s flight shown as a dashed-dotted line, and the ball’s position
+at the catching instant shown as a solid circle. Note that the offset between
+the vehicle and the ball at the catching instant is due to the net’s offset from
+the quadrocopter’s center of mass. The three lower plots show the manoeuvre
+history, until the catching instant, with (from top to bottom) the quadrocopter’s
+velocity, attitude, and thrust commands. The attitude of the vehicle is shown
+using the conventional 3-2-1 Euler yaw-pitch-roll sequence [24]. The bottom
+plot shows the thrust command, which can be seen to be within the limits
+of 5–25 m · s−2 . It should be noted that the motion primitives are applied as an
+implicit feedback law, and thus, the flown trajectory does not correspond to any
+single planned motion primitive.
+
+candidate primitives are calculated and evaluated per controller
+update step, allowing the search over a large space of possible
+catching manoeuvres.
+The algorithm appears well suited to problems requiring to
+search over a large trajectory space, such as probabilistic planning algorithms [34], or the problem of planning for dynamic
+tasks with multiple vehicles in real time, similar to [35]. The
+algorithm may be especially useful if the high-level goal is described by nonconvex constraints.
+The presented motion primitive is independent of the quadrocopter’s rotation about its thrust axis (the Euler yaw angle). This
+is reflected in that the resulting commands do not specify a yaw
+rate, ω3 . A useful extension would be to compute an input trajectory for the quadrocopter yaw rate to achieve a desired final
+yaw angle.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+It is shown that constraints on affine combinations of the
+quadrocopter’s position, velocity, and acceleration may be tested
+efficiently. An interesting extension would be to investigate efficient tests for alternative constraint sets, for example, more
+general convex sets.
+Implementations of the algorithm in both Python and C++
+can be found in [19].
+APPENDIX A
+SOLUTIONS FOR DIFFERENT END STATES CONSTRAINTS
+Here, the solutions for each combination of fixed end state are
+given in closed form for one axis. The states can be recovered
+by evaluating (22) and the trajectory cost from (26). The values
+Δp, Δv, and Δa are calculated by (24).
+Fixed Position, Velocity, and Acceleration
+⎡ ⎤
+⎡
+⎤⎡
+⎤
+α
+720
+−360T
+60T 2
+Δp
+⎢ ⎥
+⎢
+⎥⎢
+⎥
+⎢ β ⎥ = 1 ⎢ −360T 168T 2 −24T 3 ⎥ ⎢ Δv ⎥ . (61)
+⎣ ⎦ T5 ⎣
+⎦⎣
+⎦
+2
+3
+4
+γ
+Δa
+60T
+−24T
+3T
+Fixed Position and Velocity
+⎡ ⎤
+⎡
+α
+320
+⎢ ⎥
+⎢
+1
+⎢β ⎥ =
+⎢
+⎣ ⎦ T 5 ⎣ −200T
+γ
+40T 2
+
+−120T
+72T
+
+2
+
+−12T
+
+3
+
+Fixed Position and Acceleration
+⎡ ⎤
+⎡
+⎤
+α
+90
+−15T 2 
+
+⎢ ⎥
+⎢
+⎥ Δp
+3 ⎥
+⎢ β ⎥ = 1 ⎢ −90T
+15T ⎦
+.
+⎣ ⎦ 2T 5 ⎣
+Δa
+2
+4
+γ
+30T
+−3T
+Fixed Velocity and Acceleration
+⎡
+⎤
+⎡ ⎤
+0
+0
+α
+
+
+⎢
+⎥ Δv
+⎢ ⎥
+1
+⎢
+⎢β ⎥ =
+6T ⎥
+⎦ Δa .
+⎣ ⎦ T 3 ⎣ −12
+6T
+−2T 2
+γ
+Fixed Position
+
+Fixed Velocity
+
+⎡ ⎤
+⎡
+⎤
+α
+20
+⎢ ⎥
+⎢
+⎥
+⎢ β ⎥ = 1 ⎢ −20T ⎥ Δp.
+⎣ ⎦ T5 ⎣
+⎦
+2
+γ
+10T
+⎡ ⎤
+⎡
+⎤
+α
+0
+⎢ ⎥
+⎢
+⎥
+⎢ β ⎥ = 1 ⎢ −3 ⎥ Δv.
+⎣ ⎦ T3 ⎣
+⎦
+γ
+3T
+
+Fixed Acceleration
+⎡ ⎤
+⎡ ⎤
+α
+0
+⎢ ⎥
+⎢ ⎥
+1
+⎢ β ⎥ = ⎢ 0 ⎥ Δa.
+⎣ ⎦ T ⎣ ⎦
+γ
+1
+
+APPENDIX B
+DERIVATION OF ACCELERATION BOUNDS
+In Section VI-B, the claim is made that the acceleration can
+be bounded as the end time T tends to infinity. This is shown
+here for each of the different combination of end translational
+variable constraints. The constraints will be divided into those
+that constrain the final acceleration, and those that do not.
+A. Constrained Final Acceleration
+If the final acceleration is specified, it will be shown that the
+acceleration can be bounded as in (57) and (58).
+1) Fixed Position, Velocity, and Acceleration: Substituting
+for the parameters α, β, and γ from (61) into (22), the acceleration trajectory for a fully specified set of end translational
+variables is
+3af
+18a0
+9a0
+12af 2
+t+
+t + 2 t2 −
+t
+T
+T
+T
+T2
+36t
+24t
+10a0
+10af 3
+− 2 v0 − 2 vf − 3 t 3 +
+t
+T
+T
+T
+T3
+60p0
+60pf
+96v0
+84vf
+− 3 t + 3 t + 3 t2 + 3 t2
+T
+T
+T
+T
+180p0 2 180pf 2 60v0 3 60vf 3
++
+t −
+t − 4 t − 4 t
+T4
+T4
+T
+T
+120p0 3 120pf 3
+−
+t +
+t .
+T5
+T5
+
+ẍ(t) = a0 −
+
+⎤
+
+
+
+⎥ Δp
+⎥
+⎦ Δv .
+
+(62)
+
+(63)
+
+1307
+
+(68)
+
+Introducing the variable ξ := t/T ∈ [0, 1] and letting T → ∞
+yields
+lim ẍ(ξT ) = − 10a0 ξ 3 + 18a0 ξ 2 − 9a0 ξ
+
+T →∞
+
++ a0 + 10af ξ 3 − 12af ξ 2 + 3af ξ.
+
+(69)
+
+(64)
+
+(65)
+
+(66)
+
+The above does not contain the initial and final position or
+velocity, as was claimed in Section VI-B. This means that in
+the limit as the duration T tends to infinity, the acceleration
+trajectory becomes independent of the position and velocity, for
+a fully defined end state. Next, it will be shown that (57) and (58)
+hold.
+To do this, three cases will be examined independently:
+1) Case 1: a0 = af = 0.
+2) Case 2: |af | ≤ |a0 |.
+3) Case 3: |af | > |a0 |.
+For Case 1, trivially, the right-hand side of (69) goes to zero,
+such that
+lim ẍ(ξT ) = 0.
+
+T →∞
+
+(67)
+
+(70)
+
+For Case 2, we define the ratio ρ2 = af /a0 ∈ [−1, 1]. It will
+be shown that the ratio between the maximum acceleration along
+the trajectory and the initial acceleration a0 is in the range
+[−1, 1]. Substituting into (69) yields the acceleration ratio as a
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1308
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+B. Unconstrained Final Acceleration
+
+function φ2 (ξ, ρ2 ) of two variables:
+ẍ(ξT )|a f =ρ 2 a 0
+T →∞
+a0
+
+φ2 (ξ, ρ2 ) := lim
+
+= ξ 3 (10ρ1 − 10) + ξ 2 (−12ρ1 + 18)
+
+(71)
+
++ 3ξ (ρ1 − 3) + 1.
+The extrema of φ2 over ξ ∈ [0, 1] and ρ2 ∈ [−1, 1] can be calculated straightforwardly and the minimum and maximum value
+of φ2 calculated. From this, the following can be calculated
+φ2 (ξ, ρ2 ) ∈ [−1, 1]
+
+If the final acceleration is not fixed, the procedure in Appendix
+B-A1 must be modified slightly.
+1) Fixed Position and Velocity: Analogously to (69), the acceleration in this case is
+14a0
+8a0
+28t
+12t
+t + 2 t 2 − 2 v0 − 2 vf
+ẍ(t) = a0 −
+T
+T
+T
+T
+−
+
+36vf
+100p0 2 100pf 2 100t3 v0
++ 3 t2 +
+t −
+t −
+T
+T4
+T4
+3T 4
+
+(72)
+
+from which, it then follows that ∀ξ ∈ [0, 1], |af | ≤ |a0 |:
+lim |ẍ(ξT )| ≤ max{|a0 | , |af |}.
+
+T →∞
+
+φ3 (ξ, ρ3 ) := lim
+
+T →∞
+
+ẍ(ξT )|a 0 =ρ 3 a f
+af
+
+= ρ2 + ξ 3 (−10ρ2 + 10) + ξ 2 (18ρ2 − 12)
+
+(74)
+
+− 3ξ (3ρ2 − 1) .
+Similar to Case 2 above, the extrema of φ3 over ξ ∈ [0, 1]
+and ρ3 ∈ [−1, 1] can be calculated. Note that the closed interval
+is used for ρ3 , for convenience. Then
+φ3 (ξ, ρ3 ) ∈ [−1, 1]
+
+−
+
+(73)
+
+For Case 3, we define the ratio ρ3 = a0 /af ∈ (−1, 1). It will
+be shown that the ratio between the acceleration extrema along
+the trajectory and the acceleration af is in the range [−1, 1].
+Substituting into (69) again yields the acceleration ratio as a
+function of two variables φ3 (ξ, ρ3 ):
+
+lim |ẍ(ξT )| ≤ max{|a0 | , |af |}.
+
+lim ẍ(ξt) = −
+
+2af
+3a0
+4a0
+3af
+t−
+t + 2 t2 + 2 t2
+T
+T
+T
+T
+(77)
+6t
+6t
+6v0
+6vf
+− 2 v0 + 2 vf + 3 t 2 − 3 t 2 .
+T
+T
+T
+T
+Analogously to (69), the limit can be taken, and the variable ξ
+introduced:
+ẍ(t) = a0 −
+
+lim ẍ(ξT ) = 3a0 ξ 2 − 4a0 ξ + a0 + 3af ξ 2 − 2af ξ.
+
+(78)
+
+a0 t af t
++
+.
+T
+T
+
+(79)
+
+From this, and noting that t/T ∈ [0, 1], (57) and (58) follow
+trivially.
+
+(81)
+
+From this, (59) and (60) follow.
+2) Fixed Position: The acceleration trajectory in this case is
+5a0
+5a0
+10t
+5a0 t3
+t + 2 t 2 − 2 v0 −
+T
+T
+T
+3T 3
+10p0
+10pf
+10v0
+10p0
+− 3 t + 3 t + 3 t2 + 4 t2
+T
+T
+T
+T
+
+ẍ(t) = a0 −
+
+(83)
+
+10pf 2 10t3 v0
+10p0 t3
+10pf t3
+t
+−
+−
++
+.
+T4
+3T 4
+3T 5
+3T 5
+
+Introducing again the variable ξ = t/T ∈ [0, 1] and letting
+T → ∞ yields
+lim ẍ(ξT ) = −
+
+T →∞
+
+5a0 3
+ξ + 5a0 ξ 2 − 5a0 ξ + a0 .
+3
+
+(84)
+
+For a0 = 0, the right-hand side is trivially zero. For a0 = 0,
+the above can be refactored, and for ξ ∈ [0, 1]
+
+
+ẍ(ξT )
+5
+2
+lim
+(85)
+= − ξ 3 + 5ξ 2 − 5ξ + 1 ∈ − , 1 .
+T →∞ a0
+3
+3
+From this, (59) and (60) follow.
+3) Fixed Velocity: The acceleration trajectory in this case is
+ẍ(t) = a0 −
+
+Applying the same three cases as above, (57) and (58) follow.
+3) Fixed Acceleration: If only the end acceleration is specified, the acceleration trajectory is
+ẍ(t) = a0 −
+
+20a0 3
+ξ + 14a0 ξ 2 − 8a0 ξ + a0 .
+3
+
+For a0 = 0, the right-hand side is trivially zero. For a0 = 0,
+the above can be refactored, and for ξ ∈ [0, 1]
+
+
+ẍ(ξT )
+20
+29
+lim
+= − ξ 3 + 14ξ 2 − 8ξ + 1 ∈ − , 1 . (82)
+T →∞ a0
+3
+75
+
+−
+
+2) Fixed Velocity and Acceleration: If only the velocity and
+acceleration are fixed, the same procedure can be used as
+above, specifically evaluating the same three cases. Analogously
+to (68), the acceleration trajectory is
+
+T →∞
+
+20vf 3 160p0 t3
+160pf t3
+t
+−
++
+.
+T4
+3T 5
+3T 5
+
+T →∞
+
+(75)
+
+(76)
+
+(80)
+
+Introducing again the variable ξ = t/T ∈ [0, 1] and letting
+T → ∞ yields
+
+from which it follows that ∀ξ ∈ [0, 1], |af | > |a0 |:
+T →∞
+
+20a0 t3
+40p0
+40pf
+64v0
+− 3 t + 3 t + 3 t2
+3T 3
+T
+T
+T
+
+3a0 t2
+3a0
+3t
+t+
+− 2 v0
+T
+2T 2
+T
+
+3t
+3t2 v0
+3t2 vf
++ 2 vf +
+−
+.
+T
+2T 3
+2T 3
+
+(86)
+
+Introducing again the variable ξ = t/T ∈ [0, 1] and letting
+T → ∞ yields
+lim ẍ(ξT ) =
+
+T →∞
+
+3a0 2
+ξ − 3a0 ξ + a0 .
+2
+
+(87)
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+MUELLER et al.: COMPUTATIONALLY EFFICIENT MOTION PRIMITIVE FOR QUADROCOPTER TRAJECTORY GENERATION
+
+For a0 = 0, the right-hand side is trivially zero. For a0 = 0,
+the above can be refactored, and for ξ ∈ [0, 1]
+
+
+ẍ(ξT )
+3 2
+1
+= ξ − 3ξ + 1 ∈ − , 1 .
+lim
+T →∞ a0
+2
+2
+
+(88)
+
+From this, (59) and (60) follow.
+ACKNOWLEDGMENT
+The Flying Machine Arena is the result of contributions
+of many people, a full list of which can be found at
+http://flyingmachinearena.org/.
+REFERENCES
+[1] S. Bellens, J. De Schutter, and H. Bruyninckx, “A hybrid pose/wrench
+control framework for quadrotor helicopters,” in Proc. IEEE Int. Conf.
+Robot. Autom., 2012, pp. 2269–2274.
+[2] R. Ritz, M. W. Mueller, M. Hehn, and R. D’Andrea, “Cooperative quadrocopter ball throwing and catching,” in Proc. IEEE/RSJ Int. Conf. Intell.
+Robots Syst., 2012, pp. 4972–4978.
+[3] G. M. Hoffmann, H. Huang, S. L. Waslander, and C. J. Tomlin, “Quadrotor
+helicopter flight dynamics and control: Theory and experiment,” in Proc.
+AIAA Guidance, Navigation, Control Conf., 2007, pp. 1–20.
+[4] S. Grzonka, G. Grisetti, and W. Burgard, “A fully autonomous indoor
+quadrotor,” IEEE Trans. Robot., vol. 28, no. 1, pp. 90–100, Feb. 2012.
+[5] C. Richter, A. Bry, and N. Roy, “Polynomial trajectory planning for
+quadrotor flight,” presented at Robotics: Science and Systems, Workshop
+on Resource-Efficient Integration of Perception, Control and Navigation
+for Micro Aerial Vehicles, 2013.
+[6] G. M. Hoffmann, S. L. Waslander, and C. J. Tomlin, “Quadrotor helicopter
+trajectory tracking control,” in Proc. AIAA Guidance, Navigation Control
+Conf. Exhibit, Honolulu, HI, USA, Aug. 2008, pp. 1–14.
+[7] I. D. Cowling, O. A. Yakimenko, J. F. Whidborne, and A. K. Cooke, “A
+prototype of an autonomous controller for a quadrotor UAV,” in Proc. Eur.
+Control Conf., Kos, Greece, 2007, pp. 1–8.
+[8] Y. Bouktir, M. Haddad, and T. Chettibi, “Trajectory planning for a quadrotor helicopter,” in Proc. Mediterranean Conf. Control Autom., Jun. 2008,
+pp. 1258–1263.
+[9] D. Mellinger and V. Kumar, “Minimum snap trajectory generation and
+control for quadrotors,” in Proc. IEEE Int. Conf. Robot. Autom., 2011, pp.
+2520–2525.
+[10] M. Hehn and R. D’Andrea, “Quadrocopter trajectory generation and control,” in Proc. IFAC World Congr., vol. 18, no. 1, 2011, pp. 1485–1491.
+[11] M. P. Vitus, W. Zhang, and C. J. Tomlin, “A hierarchical method for
+stochastic motion planning in uncertain environments,” in Proc. IEEE/RSJ
+Int. Conf. Intell. Robots Syst., 2012, pp. 2263–2268.
+[12] I. D. Cowling, O. A. Yakimenko, J. F. Whidborne, and A. K. Cooke,
+“Direct method based control system for an autonomous quadrotor,” J.
+Intell. Robot. Syst., vol. 60, no. 2, pp. 285–316, 2010.
+[13] J. Wang, T. Bierling, L. Höcht, F. Holzapfel, S. Klose, and A. Knoll,
+“Novel dynamic inversion architecture design for quadrocopter control,”
+in Advances in Aerospace Guidance, Navigation and Control. New York,
+NY, USA: Springer, 2011, pp. 261–272.
+[14] M. W. Achtelik, S. Lynen, M. Chli, and R. Siegwart, “Inversion based
+direct position control and trajectory following for micro aerial vehicles,”
+in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst., 2013, pp. 2933–2939.
+[15] M. Fliess, J. Lévine, P. Martin, and P. Rouchon, “Flatness and defect of
+non-linear systems: Introductory theory and examples,” Int. J. Control,
+vol. 61, no. 6, pp. 1327–1361, 1995.
+[16] R. M. Murray, M. Rathinam, and W. Sluis, “Differential flatness of mechanical control systems: A catalog of prototype systems,” in Proc. ASME
+Int. Mech. Eng. Congr. Expo., 1995.
+[17] N. Faiz, S. Agrawal, and R. Murray, “Differentially flat systems with
+inequality constraints: An approach to real-time feasible trajectory generation,” J. Guidance, Control, Dyn., vol. 24, no. 2, pp. 219–227, 2001.
+[18] C. Louembet, F. Cazaurang, and A. Zolghadri, “Motion planning for flat
+systems using positive b-splines: An LMI approach,” Automatica, vol. 46,
+no. 8, pp. 1305–1309, 2010.
+
+1309
+
+[19] M. W. Mueller. (2015). Quadrocopter Trajectory Generator, Zurich,
+Switzerland. [Online]. Available: https://github.com/markwmuller/
+RapidQuadrocopterTrajectories
+[20] M. W. Mueller and R. D’Andrea, “A model predictive controller for
+quadrocopter state interception,” in Proc. Eur. Control Conf., 2013,
+pp. 1383–1389.
+[21] M. W. Mueller, M. Hehn, and R. D’Andrea, “A computationally efficient
+algorithm for state-to-state quadrocopter trajectory generation and feasibility verification,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst., 2013,
+pp. 3480–3486.
+[22] P. Martin and E. Salaün, “The true role of accelerometer feedback
+in quadrotor control,” in Proc. IEEE Int. Conf. Robot. Autom., 2010,
+pp. 1623–1629.
+[23] R. Mahony, V. Kumar, and P. Corke, “Aerial vehicles: Modeling, estimation, and control of quadrotor,” IEEE Robot. Autom. Mag., vol. 19, no. 3,
+pp. 20–32, Sep. 2012.
+[24] P. H. Zipfel, Modeling and Simulation of Aerospace Vehicle Dynamics
+Second Edition. Washington, DC, USA: AIAA, 2007.
+[25] D. P. Bertsekas, Dynamic Programming and Optimal Control, Vol. I.
+Belmont, MA, USA: Athena Scientific, 2005.
+[26] P. Borwein and T. Erdélyi, Polynomials and Polynomial Inequalities (ser.
+Graduate Texts in Mathematics Series). New York, NY, USA: Springer,
+1995.
+[27] M. Achtelik, S. Weiss, M. Chli, and R. Siegwart, “Path planning for motion
+dependent state estimation on micro aerial vehicles,” in Proc. IEEE Int.
+Conf. Robot. Autom., 2013, pp. 3926–3932.
+[28] M. Hehn, R. Ritz, and R. D’Andrea, “Performance benchmarking of
+quadrotor systems using time-optimal control,” Auton. Robots, vol. 33,
+pp. 69–88, 2012.
+[29] L. Meier, P. Tanskanen, L. Heng, G. Lee, F. Fraundorfer, and M. Pollefeys,
+“ PIXHAWK: A micro aerial vehicle design for autonomous flight using
+onboard computer vision,” Auton. Robots, vol. 33, nos. 1/2, pp. 21–39,
+2012.
+[30] S. Lupashin, M. Hehn, M. W. Mueller, A. P. Schoellig, M. Sherback, and
+R. D’Andrea, “A platform for aerial robotics research and demonstration:
+The Flying Machine Arena,” Mechatronics, vol. 24, no. 1, pp. 41–54,
+2014.
+[31] D. Gurdan, J. Stumpf, M. Achtelik, K.-M. Doth, G. Hirzinger, and
+D. Rus, “Energy-efficient autonomous four-rotor flying robot controlled at
+1 kHz,” in Proc. IEEE Int. Conf. Robot. Autom., Apr. 2007, pp. 361–366.
+[32] M. W. Mueller, S. Lupashin, and R. D’Andrea, “Quadrocopter ball juggling,” in Proc. IEEE/RSJ Int. Conf. Intell. Robots Syst., 2011, pp. 5113–
+5120.
+[33] C. E. Garcı́a, D. M. Prett, and M. Morari, “Model predictive control:
+Theory and practice–a survey,” Automatica, vol. 25, no. 3, pp. 335–348,
+1989.
+[34] E. Frazzoli, M. Dahleh, and E. Feron, “Real-time motion planning for
+agile autonomous vehicles,” J. Guidance Control Dyn., vol. 25, no. 1,
+pp. 116–129, 2002.
+[35] M. Sherback, O. Purwin, and R. D’Andrea, “ Real-time motion planning and control in the 2005 cornell robocup system,” in Robot Motion
+and Control (ser. Lecture Notes in Control and Information Sciences),
+vol. 335, K. Kozlowski, Ed. London, U.K.: Springer, 2006,
+pp. 245–263.
+
+Mark W. Mueller received the B.Eng. degree in mechanical engineering from the University of Pretoria,
+Pretoria, South Africa, in 2009, and the M.Sc. degree in mechanical engineering from the ETH Zurich,
+Zurich, Switzerland, in 2011. He is currently working toward the Doctoral degree with the Institute for
+Dynamic Systems and Control, ETH Zurich.
+Dr. Mueller received awards for the best mechanical engineering thesis, and the best aeronautical thesis, for his bachelors thesis in 2008, and received the
+Jakob Ackeret award from the Swiss Association of
+Aeronautical Sciences for his masters thesis in 2011. His masters studies were
+supported by a scholarship from the Swiss Government.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
+
+1310
+
+Markus Hehn received the Diplom-Ingenieur degree in mechatronics from TU Darmstadt, Darmstadt,
+Germany, in 2009, and the Doctor of Sciences degree
+from ETH Zurich, Zurich, Switzerland, in 2014.
+He has worked on optimizing the operating strategy of Diesel engines to reduce emissions and fuel
+consumption, on the characterization of component
+load profiles for axle split hybrid vehicle drivetrains,
+and on the performance development of Formula One
+racing engines. His main research interests include
+the control and trajectory generation for multirotor
+vehicles during fast maneuvering, optimality-based maneuvers, multivehicle
+coordination, and learning algorithms.
+Dr. Hehn received a scholarship from Robert Bosch GmbH for his graduate
+studies and the Jakob-Ackeret Prize of the Swiss Association of Aeronautical
+Sciences for his doctoral thesis.
+
+IEEE TRANSACTIONS ON ROBOTICS, VOL. 31, NO. 6, DECEMBER 2015
+
+Raffaello D’Andrea received the B.Sc. degree in
+engineering science from the University of Toronto,
+Toronto, ON, Canada, in 1991, and the M.S. and
+Ph.D. degrees in electrical engineering from the California Institute of Technology, Pasadena, CA, USA
+in 1992 and 1997, respectively.
+He was an Assistant Professor and, then, an Associate Professor with Cornell University from 1997
+to 2007. While on leave from Cornell University,
+from 2003 to 2007, he cofounded Kiva Systems,
+where he led the systems architecture, robot design,
+robot navigation and coordination, and control algorithms efforts. He is currently a Professor of dynamic systems and control with ETH Zurich, Zurich,
+Switzerland.
+
+Authorized licensed use limited to: Carnegie Mellon University Libraries. Downloaded on March 25,2026 at 18:45:48 UTC from IEEE Xplore. Restrictions apply.
