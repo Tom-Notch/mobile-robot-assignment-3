@@ -50,16 +50,22 @@ class RRT(object):
             _idx, sample_pos = self.sample()
             nearest: Node = self.find_nearest_node(sample_pos)
             new_pos: np.ndarray = self._steer(nearest.position, sample_pos)
-            if self.collision_checker.has_collision(
-                np.round(nearest.position).astype(int), new_pos
-            ):
+            new_idx: int = self.get_idx(new_pos)
+            if new_idx in self.tree:
+                continue
+            nearest_int: np.ndarray = np.round(nearest.position).astype(int)
+            if self.collision_checker.has_collision(new_pos, nearest_int):
                 continue
             child: Node = self.insert_node(nearest, new_pos)
             if (
                 np.linalg.norm(new_pos.astype(float) - self.end.astype(float))
                 < GOAL_THRESH
             ):
-                if not self.collision_checker.has_collision(child.position, end_i):
+                end_idx: int = self.get_idx(end_i)
+                if (
+                    end_idx not in self.tree
+                    and not self.collision_checker.has_collision(end_i, child.position)
+                ):
                     return self.insert_node(child, end_i)
         fail: Node = Node(self.get_idx(self.start), np.array(self.start))
         fail.parent_idx = fail.idx
